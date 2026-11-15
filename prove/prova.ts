@@ -43,9 +43,7 @@ const IMPORT_ATTESI: Record<string, string[]> = { "extension/dist/extension.cjs"
 const PERCORSO_ASSOLUTO = /(?<![A-Za-z])[A-Za-z]:[\\/]/;
 const VIETATE = [/bun:/, /Bun\./];
 
-// Il percorso reale: su macOS la cartella temporanea passa da un collegamento (/var è /private/var), e un punto d'arresto
-// messo sul percorso del collegamento non si aggancia al programma, che porta quello reale.
-const cartella = realpathSync(mkdtempSync(join(tmpdir(), "c-run  prova-")));
+const cartella = mkdtempSync(join(tmpdir(), "c-run  prova-"));
 // L'editor appena chiuso può tenere la cartella ancora per un momento: la pulizia non decide l'esito.
 process.on("exit", () => {
   try {
@@ -239,7 +237,12 @@ async function nellEditor(eseguibile: string): Promise<void> {
   }
 
   // I casi in una cartella con spazi doppi; l'errore è leggi.c senza il punto e virgola della riga 5.
-  const casi = join(cartella, "casi  con  spazi");
+  // Il percorso reale dei casi: su macOS la cartella temporanea passa da un collegamento (/var è /private/var), e un punto
+  // d'arresto messo sul percorso del collegamento non si aggancia al programma, che porta quello reale. Solo i casi: il
+  // profilo dell'editor resta sul percorso corto, perché sul reale il suo socket supera la lunghezza ammessa da macOS (misurato:
+  // «listen EINVAL»).
+  mkdirSync(join(cartella, "casi  con  spazi"));
+  const casi = realpathSync(join(cartella, "casi  con  spazi"));
   cpSync(join(RADICE, "prove", "casi", "ciao"), join(casi, "ciao"), { recursive: true });
   cpSync(join(RADICE, "prove", "casi", "leggi"), join(casi, "leggi"), { recursive: true });
   mkdirSync(join(casi, "errore"));

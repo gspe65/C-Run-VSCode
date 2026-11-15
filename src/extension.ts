@@ -144,15 +144,16 @@ async function compilaEdEsegui(uri?: vscode.Uri): Promise<void> {
   apriIlTerminale(c.righe, c.piano.cartella, c.programma, true);
 }
 
-async function passoPasso(uri?: vscode.Uri): Promise<void> {
+/** Vero se il debug è partito. */
+async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
   const doc = await fileC(uri);
-  if (doc === undefined) return;
+  if (doc === undefined) return false;
   if (vscode.extensions.getExtension(ESTENSIONE_DEL_DEBUG) === undefined) {
     void vscode.window.showErrorMessage(`Per andare passo passo serve l'estensione «LLDB DAP» (${ESTENSIONE_DEL_DEBUG}).`);
-    return;
+    return false;
   }
   const c = await compilaIlFile(doc, true);
-  if (c === undefined) return;
+  if (c === undefined) return false;
   // Senza punti d'arresto nel file, il programma si ferma sulla prima riga di main: se no correrebbe fino alla fine.
   const conPunti = vscode.debug.breakpoints.some((b) => b.enabled && b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath.toLowerCase() === doc.uri.fsPath.toLowerCase());
   // Il terminale del debugger prende il fuoco: lo studente scrive lì ciò che il programma legge, non nel file.
@@ -160,13 +161,16 @@ async function passoPasso(uri?: vscode.Uri): Promise<void> {
     if (t !== terminale) t.show(false);
   });
   setTimeout(() => sub.dispose(), 30000);
-  await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(doc.uri), {
+  // `console` per le versioni nuove di lldb-dap, `runInTerminal` per quelle che non la conoscono (misurato: la 18 di Ubuntu
+  // 24.04 ignora `console` e non apre il terminale).
+  return vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(doc.uri), {
     type: "lldb-dap",
     request: "launch",
     name: "Passo passo",
     program: join(c.piano.cartella, c.programma),
     cwd: c.piano.cartella,
     console: "integratedTerminal",
+    runInTerminal: true,
     ...(conPunti ? {} : { preRunCommands: ["breakpoint set --name main --one-shot true"] }),
   });
 }

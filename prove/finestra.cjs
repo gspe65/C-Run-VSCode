@@ -122,12 +122,12 @@ exports.run = async () => {
   let sessione;
   const s1 = vscode.debug.onDidStartDebugSession((s) => (sessione = s));
   const fine1 = new Promise((r) => vscode.debug.onDidTerminateDebugSession(r));
-  await vscode.commands.executeCommand("c-run.passoPasso");
+  const partito = await vscode.commands.executeCommand("c-run.passoPasso");
   const t0 = Date.now();
   await attendi(() => aperti.some((t) => t.creationOptions?.name !== NOME), 45000);
   const msAlTerminale = Date.now() - t0;
   const delDebug = aperti.find((t) => t.creationOptions?.name !== NOME);
-  esiti.passo = { terminale: delDebug?.name ?? null, msAlTerminale, fermoPrima: eventi.some((e) => e.evento === "stopped") };
+  esiti.passo = { partito, terminale: delDebug?.name ?? null, msAlTerminale, fermoPrima: eventi.some((e) => e.evento === "stopped") };
   await pausa(1500);
   delDebug?.sendText("21", true);
   esiti.passo.fermo = await attendi(() => eventi.some((e) => e.evento === "stopped"), 20000);
