@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { nomeDelProgramma, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelRifiuto, scegliCompilatore, segnalazioniDi } from "../src/piano";
+import { nomeDelProgramma, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi } from "../src/piano";
 
 const uscita = (nome: string) => readFileSync(join(import.meta.dir, "casi", "uscite", nome), "utf8");
 const CARTELLA = join("prova", "dove");
@@ -74,6 +74,10 @@ test("la riga del rifiuto: uno, più d'uno, in un altro file, nessuna riga", () 
   expect(rigaDelRifiuto([e(5), e(9), { ...e(2), gravita: "avviso" }], file)).toBe("2 errori, il programma non parte: li trovi in «Problemi» (il primo alla riga 5).");
   expect(rigaDelRifiuto([e(3, join(CARTELLA, "utils.c"))], file)).toBe("1 errore, il programma non parte: lo trovi in «Problemi» (riga 3 di utils.c).");
   expect(rigaDelRifiuto([], file)).toBe("La compilazione non è riuscita, il programma non parte: il motivo è nelle righe qui sopra.");
+});
+
+test("il passo passo impossibile col compilatore del debugger: la frase nomina il compilatore e il rimedio", () => {
+  expect(rigaDelPassoPassoImpossibile("clang")).toBe("Questo programma si compila e si esegue con «Compila ed esegui», ma non con clang, che serve al passo passo: usa funzioni che clang qui non ha. Gli errori di clang sono in «Problemi».");
 });
 
 test("il programma del Makefile: l'unico eseguibile nuovo", () => {

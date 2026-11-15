@@ -63,6 +63,12 @@ export function rigaDelRifiuto(segnalazioni: Segnalazione[], fileAperto: string)
     : `${errori.length} errori, il programma non parte: li trovi in «Problemi» (il primo alla ${dove}).`;
 }
 
+/** La riga del passo passo quando il programma si compila col suo compilatore ma non con quello del debugger (su Windows: un
+ *  programma che usa fork o altre funzioni che ci sono solo con il gcc di MSYS2 o Cygwin, e clang no). */
+export function rigaDelPassoPassoImpossibile(compilatore: string): string {
+  return `Questo programma si compila e si esegue con «Compila ed esegui», ma non con ${compilatore}, che serve al passo passo: usa funzioni che ${compilatore} qui non ha. Gli errori di ${compilatore} sono in «Problemi».`;
+}
+
 export type Voce = { nome: string; modificato: number; eseguibile: boolean };
 
 /** Il programma che il Makefile ha prodotto: l'unico eseguibile della cartella scritto dopo l'inizio della compilazione.

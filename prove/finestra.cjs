@@ -46,8 +46,19 @@ async function apri(...parti) {
 
 // Il debugger: gli eventi «stopped» e la fine delle sessioni.
 const eventi = [];
+// I messaggi del debugger (risposte fallite, uscite che non sono del programma) si registrano per capire un rosso.
+const messaggi = [];
 vscode.debug.registerDebugAdapterTrackerFactory("*", {
-  createDebugAdapterTracker: () => ({ onDidSendMessage: (m) => m.type === "event" && eventi.push({ evento: m.event, corpo: m.body }) }),
+  createDebugAdapterTracker: () => ({
+    onDidSendMessage: (m) => {
+      if (m.type === "event") eventi.push({ evento: m.event, corpo: m.body });
+      if (m.type === "response" && m.success === false) messaggi.push(`risposta fallita a ${m.command}: ${m.message ?? ""} ${JSON.stringify(m.body ?? {}).slice(0, 300)}`);
+      if (m.type === "event" && m.event === "output" && m.body?.category !== "stdout" && m.body?.category !== "telemetry") messaggi.push(`${m.body?.category}: ${String(m.body?.output).slice(0, 300)}`);
+      if (m.type === "request") messaggi.push(`richiesta al editor: ${m.command}`);
+    },
+    onError: (e) => messaggi.push(`errore: ${String(e)}`),
+    onExit: (codice, segnale) => messaggi.push(`il debugger è uscito: ${codice} ${segnale ?? ""}`),
+  }),
 });
 const aperti = [];
 vscode.window.onDidOpenTerminal((t) => aperti.push(t));
@@ -107,13 +118,16 @@ exports.run = async () => {
   vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(leggi.document.uri, new vscode.Position(7, 0)))]);
   eventi.length = 0;
   aperti.length = 0;
+  messaggi.length = 0;
   let sessione;
   const s1 = vscode.debug.onDidStartDebugSession((s) => (sessione = s));
   const fine1 = new Promise((r) => vscode.debug.onDidTerminateDebugSession(r));
   await vscode.commands.executeCommand("c-run.passoPasso");
-  await attendi(() => aperti.some((t) => t.creationOptions?.name !== NOME), 30000);
+  const t0 = Date.now();
+  await attendi(() => aperti.some((t) => t.creationOptions?.name !== NOME), 45000);
+  const msAlTerminale = Date.now() - t0;
   const delDebug = aperti.find((t) => t.creationOptions?.name !== NOME);
-  esiti.passo = { terminale: delDebug?.name ?? null, fermoPrima: eventi.some((e) => e.evento === "stopped") };
+  esiti.passo = { terminale: delDebug?.name ?? null, msAlTerminale, fermoPrima: eventi.some((e) => e.evento === "stopped") };
   await pausa(1500);
   delDebug?.sendText("21", true);
   esiti.passo.fermo = await attendi(() => eventi.some((e) => e.evento === "stopped"), 20000);
@@ -123,6 +137,7 @@ exports.run = async () => {
   }
   esiti.passo.finito = await Promise.race([fine1.then(() => true), pausa(15000).then(() => false)]);
   esiti.passo.testo = await testoDel(delDebug);
+  esiti.passo.messaggi = [...messaggi];
   s1.dispose();
   salva();
 
@@ -130,11 +145,13 @@ exports.run = async () => {
   vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
   await apri("leggi", "leggi.c");
   eventi.length = 0;
+  messaggi.length = 0;
   sessione = undefined;
   const s2 = vscode.debug.onDidStartDebugSession((s) => (sessione = s));
   await vscode.commands.executeCommand("c-run.passoPasso");
   esiti.inizio = { fermo: await attendi(() => eventi.some((e) => e.evento === "stopped"), 30000) };
   if (esiti.inizio.fermo && sessione) Object.assign(esiti.inizio, await fermoSu(sessione));
+  esiti.inizio.messaggi = [...messaggi];
   if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();
   s2.dispose();
   await pausa(1000);

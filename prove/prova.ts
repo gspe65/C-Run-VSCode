@@ -17,7 +17,7 @@
 // - il fuoco del sistema; un editor diverso da quello dato con `--editor`;
 // - i compilatori: quelli del sistema (su Windows clang di llvm-mingw e gcc di MSYS), che decidono i messaggi.
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
@@ -32,7 +32,7 @@ const { values: opzioni } = parseArgs({
 /** I denominatori, dichiarati prima della corsa: le chiamate a `prova` senza editor, e quelle in più con l'editor. */
 const PROVE_SENZA_EDITOR = 16;
 const PROVE_DELL_EDITOR = 14;
-const TEST_ATTESI = 12;
+const TEST_ATTESI = 13;
 
 /** Ciò che il pacchetto contiene, e nient'altro. */
 const NEL_PACCHETTO = ["[Content_Types].xml", "extension.vsixmanifest", "extension/LICENSE.txt", "extension/dist/extension.cjs", "extension/dist/terminale.cjs", "extension/package.json", "extension/readme.md"];
@@ -43,7 +43,9 @@ const IMPORT_ATTESI: Record<string, string[]> = { "extension/dist/extension.cjs"
 const PERCORSO_ASSOLUTO = /(?<![A-Za-z])[A-Za-z]:[\\/]/;
 const VIETATE = [/bun:/, /Bun\./];
 
-const cartella = mkdtempSync(join(tmpdir(), "c-run  prova-"));
+// Il percorso reale: su macOS la cartella temporanea passa da un collegamento (/var è /private/var), e un punto d'arresto
+// messo sul percorso del collegamento non si aggancia al programma, che porta quello reale.
+const cartella = realpathSync(mkdtempSync(join(tmpdir(), "c-run  prova-")));
 // L'editor appena chiuso può tenere la cartella ancora per un momento: la pulizia non decide l'esito.
 process.on("exit", () => {
   try {

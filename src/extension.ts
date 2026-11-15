@@ -3,9 +3,9 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import * as vscode from "vscode";
-import { pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelRifiuto, scegliCompilatore, segnalazioniDi, type Piano, type Riga, type Segnalazione } from "./piano";
+import { pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi, type Piano, type Riga, type Segnalazione } from "./piano";
 
 const NOME_DEL_TERMINALE = "Programma C";
 const ESTENSIONE_DEL_DEBUG = "llvm-vs-code-extensions.lldb-dap";
@@ -105,7 +105,9 @@ async function compilaIlFile(doc: vscode.TextDocument, perPassoPasso: boolean): 
   mostraNelPannello(segnalazioni, piano.come === "makefile" ? "make" : (compilatore ?? "cc"));
   const righe = righeDellaCompilazione(piano, esito.errore !== undefined ? `${esito.testo}\n${esito.errore}` : esito.testo);
   if (esito.uscita !== 0) {
-    righe.push({ testo: "" }, { testo: rigaDelRifiuto(segnalazioni, file) });
+    // Per il passo passo: se il programma si compila nel modo normale, il difetto non è del programma ma del compilatore.
+    const normale = perPassoPasso && compilatore !== undefined ? await compila(pianoDiCompilazione({ file, haMakefile, sistema: process.platform, compilatore, perPassoPasso: false })) : undefined;
+    righe.push({ testo: "" }, { testo: normale?.uscita === 0 ? rigaDelPassoPassoImpossibile(basename(compilatore!)) : rigaDelRifiuto(segnalazioni, file) });
     apriIlTerminale(righe, piano.cartella, undefined, false);
     const primo = segnalazioni.find((s) => s.gravita === "errore");
     if (primo !== undefined) {
