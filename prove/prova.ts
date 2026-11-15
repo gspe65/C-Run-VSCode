@@ -39,7 +39,7 @@ const NEL_PACCHETTO = ["[Content_Types].xml", "extension.vsixmanifest", "extensi
 /** Le voci che sono file del repository così come sono. Il README vsce lo mette sempre. */
 const DAL_REPOSITORY: Record<string, string> = { "extension/package.json": "package.json", "extension/LICENSE.txt": "LICENSE", "extension/readme.md": "README.md" };
 /** Che cosa può importare ciascun programma del pacchetto: l'editor e i moduli di Node, nient'altro. */
-const IMPORT_ATTESI: Record<string, string[]> = { "extension/dist/extension.cjs": ["node:child_process", "node:fs", "node:path", "vscode"], "extension/dist/terminale.cjs": [] };
+const IMPORT_ATTESI: Record<string, string[]> = { "extension/dist/extension.cjs": ["node:child_process", "node:fs", "node:os", "node:path", "vscode"], "extension/dist/terminale.cjs": [] };
 const PERCORSO_ASSOLUTO = /(?<![A-Za-z])[A-Za-z]:[\\/]/;
 const VIETATE = [/bun:/, /Bun\./];
 

@@ -2,7 +2,8 @@
 // «Programma C» e l'avvio del passo passo. La logica sta in piano.ts.
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
 import * as vscode from "vscode";
 import { pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi, type Piano, type Riga, type Segnalazione } from "./piano";
@@ -158,21 +159,59 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
   const conPunti = vscode.debug.breakpoints.some((b) => b.enabled && b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath.toLowerCase() === doc.uri.fsPath.toLowerCase());
   // Il terminale del debugger prende il fuoco: lo studente scrive lì ciò che il programma legge, non nel file.
   const sub = vscode.window.onDidOpenTerminal((t) => {
-    if (t !== terminale) t.show(false);
+    if (t !== terminale && t !== terminaleDelPasso) t.show(false);
   });
   setTimeout(() => sub.dispose(), 30000);
-  // `console` per le versioni nuove di lldb-dap, `runInTerminal` per quelle che non la conoscono (misurato: la 18 di Ubuntu
-  // 24.04 ignora `console` e non apre il terminale).
+  // Su Linux il debugger non può agganciarsi a un programma lanciato dal terminale (il kernel lascia tracciare solo i figli:
+  // misurato, «process exited during launch or attach»): lldb lo lancia come figlio suo, con ingresso e uscita sul terminale
+  // «Passo passo», che dice il suo dispositivo. Altrove il terminale lo apre lldb-dap (`console` per le versioni nuove,
+  // `runInTerminal` per quelle che non la conoscono).
+  let comeSiCollega: Record<string, unknown> = { console: "integratedTerminal", runInTerminal: true };
+  if (process.platform === "linux") {
+    const dispositivo = await terminaleDelPassoPasso(c.piano.cartella);
+    if (dispositivo === undefined) {
+      void vscode.window.showErrorMessage("Il terminale «Passo passo» non si è aperto: il passo passo non parte.");
+      return false;
+    }
+    comeSiCollega = { console: "internalConsole", stdio: [dispositivo, dispositivo, dispositivo] };
+  }
   return vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(doc.uri), {
     type: "lldb-dap",
     request: "launch",
     name: "Passo passo",
     program: join(c.piano.cartella, c.programma),
     cwd: c.piano.cartella,
-    console: "integratedTerminal",
-    runInTerminal: true,
+    ...comeSiCollega,
     ...(conPunti ? {} : { preRunCommands: ["breakpoint set --name main --one-shot true"] }),
   });
+}
+
+let terminaleDelPasso: vscode.Terminal | undefined;
+
+/** Su Linux: il terminale «Passo passo», che scrive il nome del suo dispositivo in un file e poi resta fermo; il programma
+ *  in debug legge e scrive lì. Il dispositivo, o nulla se non arriva entro 10 secondi. */
+async function terminaleDelPassoPasso(cartella: string): Promise<string | undefined> {
+  terminaleDelPasso?.dispose();
+  const file = join(tmpdir(), `c-run-tty-${process.pid}-${Date.now()}`);
+  terminaleDelPasso = vscode.window.createTerminal({
+    name: "Passo passo",
+    shellPath: "/bin/sh",
+    shellArgs: ["-c", 'printf "\\033]0;Passo passo\\007"; tty > "$0"; exec sleep 2147483647', file],
+    cwd: cartella,
+    iconPath: new vscode.ThemeIcon("debug-alt"),
+  });
+  terminaleDelPasso.show(false);
+  for (let i = 0; i < 100; i++) {
+    if (existsSync(file)) {
+      const d = readFileSync(file, "utf8").trim();
+      if (d.startsWith("/dev/")) {
+        rmSync(file, { force: true });
+        return d;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return undefined;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
