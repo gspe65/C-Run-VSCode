@@ -92,9 +92,15 @@ jobs:
       - name: make e gcc di MSYS2
         if: inputs.togli != matrix.sistema && runner.os == 'Windows'
         run: /c/msys64/usr/bin/pacman.exe -S --noconfirm --needed make gcc
+      # Un lldb recente dai pacchetti di LLVM: il 18 di Ubuntu 24.04 non aggancia il programma lanciato nel terminale
+      # integrato («Timed out trying to get messages from the debug adaptor»).
       - name: lldb
         if: inputs.togli != matrix.sistema && runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y lldb
+        run: |
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update && sudo apt-get install -y lldb-21
+          ls /usr/bin/lldb-dap*
       - id: vscodium
         if: inputs.togli != matrix.sistema
         run: bun strumenti/vscodium.ts --cartella "$RUNNER_TEMP/vscodium" --uscita "$GITHUB_OUTPUT"
