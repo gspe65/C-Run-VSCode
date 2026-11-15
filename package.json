@@ -1,0 +1,50 @@
+{
+  "name": "C-Run",
+  "displayName": "C: compila, esegui, passo passo",
+  "description": "Compila ed esegue con un clic il programma C del file aperto, o lo segue passo passo.",
+  "version": "0.0.1",
+  "publisher": "gilan65",
+  "license": "MIT",
+  "private": true,
+  "repository": { "type": "git", "url": "https://github.com/gspe65/C-Run-VSCode" },
+  "engines": { "vscode": "^1.75.0" },
+  "main": "./dist/extension.cjs",
+  "activationEvents": ["onLanguage:c"],
+  "contributes": {
+    "commands": [
+      { "command": "c-run.compilaEdEsegui", "title": "Compila ed esegui", "category": "C", "icon": "$(play)" },
+      { "command": "c-run.passoPasso", "title": "Passo passo", "category": "C", "icon": "$(debug-alt)" }
+    ],
+    "menus": {
+      "editor/title": [
+        { "command": "c-run.compilaEdEsegui", "when": "resourceLangId == c", "group": "navigation@1" },
+        { "command": "c-run.passoPasso", "when": "resourceLangId == c", "group": "navigation@2" }
+      ],
+      "commandPalette": [
+        { "command": "c-run.compilaEdEsegui", "when": "editorLangId == c" },
+        { "command": "c-run.passoPasso", "when": "editorLangId == c" }
+      ]
+    },
+    "configuration": {
+      "title": "C: compila, esegui, passo passo",
+      "properties": {
+        "c-run.compilatore": {
+          "type": "string",
+          "default": "",
+          "description": "Il compilatore per un file senza Makefile e per il passo passo. Vuoto: clang, se no gcc, se no cc."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "costruisci": "bun strumenti/costruisci.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "@types/node": "26.6.6",
+    "@types/vscode": "1.75.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.1.0",
+    "typescript": "7.0.2"
+  }
+}

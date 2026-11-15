@@ -1,0 +1,5 @@
+errore.c:5:33: error: expected ';' after expression
+    5 |     printf("Scrivi un numero: ")
+      |                                 ^
+      |                                 ;
+1 error generated.

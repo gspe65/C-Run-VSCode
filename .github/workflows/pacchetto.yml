@@ -1,0 +1,165 @@
+# Il pacchetto dell'estensione: costruito una volta, provato con l'editor vero su Windows, Ubuntu e macOS, contato, e solo
+# allora attestato e messo in una release sull'etichetta. Su un'etichetta v<versione del manifesto> fa tutto; lanciata a mano
+# costruisce e prova senza release, e con `togli` lascia fuori un sistema dalla matrice: il conteggio deve dire rosso.
+#
+# I compilatori: su Windows clang e lldb-dap di llvm-mingw (scaricati con l'impronta da strumenti/strumenti.ts), make e gcc
+# di MSYS2 della macchina; su Ubuntu quelli del sistema più lldb; su macOS quelli di Xcode.
+
+name: pacchetto
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      togli:
+        description: "Un sistema da lasciare fuori dalla matrice (controllo del conteggio): windows, linux o macos"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pacchetto-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  costruzione:
+    runs-on: ubuntu-latest
+    outputs:
+      nome: ${{ steps.pacchetto.outputs.nome }}
+      sha256: ${{ steps.pacchetto.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: L'etichetta è la versione del manifesto
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          versione=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$versione" ]; then
+            echo "ROSSO: l'etichetta $GITHUB_REF_NAME non è v$versione"
+            exit 1
+          fi
+      - name: La prova senza editor, che costruisce il pacchetto
+        run: bun prove/prova.ts
+      - id: pacchetto
+        name: Il pacchetto e la sua impronta
+        run: |
+          file=$(ls dist/*.vsix)
+          echo "nome=$(basename "$file")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$file" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          sha256sum "$file"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pacchetto
+          path: dist/*.vsix
+          if-no-files-found: error
+
+  prova:
+    needs: costruzione
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sistema: windows
+            os: windows-latest
+          - sistema: linux
+            os: ubuntu-latest
+          - sistema: macos
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        if: inputs.togli != matrix.sistema
+      - uses: oven-sh/setup-bun@v2
+        if: inputs.togli != matrix.sistema
+        with:
+          bun-version: 1.4.2
+      - if: inputs.togli != matrix.sistema
+        run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        if: inputs.togli != matrix.sistema
+        with:
+          name: pacchetto
+          path: pacchetto
+      - name: make e gcc di MSYS2
+        if: inputs.togli != matrix.sistema && runner.os == 'Windows'
+        run: /c/msys64/usr/bin/pacman.exe -S --noconfirm --needed make gcc
+      - name: lldb
+        if: inputs.togli != matrix.sistema && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y lldb
+      - id: vscodium
+        if: inputs.togli != matrix.sistema
+        run: bun strumenti/vscodium.ts --cartella "$RUNNER_TEMP/vscodium" --uscita "$GITHUB_OUTPUT"
+      - if: inputs.togli != matrix.sistema
+        run: bun strumenti/strumenti.ts --cartella "$RUNNER_TEMP/strumenti" --uscita "$RUNNER_TEMP/strumenti/strumenti.txt"
+      - name: La prova con l'editor, sul pacchetto costruito
+        if: inputs.togli != matrix.sistema
+        run: |
+          comando=(bun prove/prova.ts --pacchetto "pacchetto/${{ needs.costruzione.outputs.nome }}" --editor "${{ steps.vscodium.outputs.editor }}" --strumenti "$RUNNER_TEMP/strumenti/strumenti.txt" --rapporto "rapporto/rapporto-${{ matrix.sistema }}.json")
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a "${comando[@]}"; else "${comando[@]}"; fi
+      - uses: actions/upload-artifact@v7
+        if: always() && inputs.togli != matrix.sistema
+        with:
+          name: rapporto-${{ matrix.sistema }}
+          path: rapporto/
+          if-no-files-found: error
+
+  conteggio:
+    needs: [costruzione, prova]
+    if: always() && needs.costruzione.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: rapporto-*
+          path: rapporti
+      - name: Un rapporto verde per ogni sistema dichiarato, sul pacchetto costruito
+        run: |
+          mkdir -p rapporti
+          bun prove/conteggio.ts --cartella rapporti --sha256 "${{ needs.costruzione.outputs.sha256 }}"
+
+  release:
+    needs: [costruzione, conteggio]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: pacchetto
+          path: pacchetto
+      - name: Il file è quello costruito e provato
+        run: |
+          echo "${{ needs.costruzione.outputs.sha256 }}  pacchetto/${{ needs.costruzione.outputs.nome }}" | sha256sum -c -
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: pacchetto/${{ needs.costruzione.outputs.nome }}
+      - name: La release sull'etichetta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          versione=$(node -p "require('./package.json').version")
+          nota="note/$GITHUB_REF_NAME.md"
+          if [ ! -f "$nota" ]; then echo "ROSSO: manca $nota"; exit 1; fi
+          # Le versioni 0.0.x sono di prova: pre-release, e il titolo lo dice.
+          if [[ "$versione" == 0.0.* ]]; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease --title "C-Run $versione (versione di prova)" --notes-file "$nota" "pacchetto/${{ needs.costruzione.outputs.nome }}"
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "C-Run $versione" --notes-file "$nota" "pacchetto/${{ needs.costruzione.outputs.nome }}"
+          fi

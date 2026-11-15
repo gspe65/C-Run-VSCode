@@ -1,0 +1,8 @@
+{
+  // Le prove e gli strumenti: girano sotto Bun. I file per Node e per l'editor sono JavaScript.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun", "node"]
+  },
+  "include": ["*.ts", "../strumenti/*.ts"]
+}

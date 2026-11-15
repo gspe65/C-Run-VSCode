@@ -1,0 +1,4 @@
+avviso.c:4:12: warning: unused variable 'inutile' [-Wunused-variable]
+    4 |     int n, inutile;
+      |            ^~~~~~~
+1 warning generated.

@@ -1,0 +1,8 @@
+main.c: In function 'main':
+main.c:5:13: error: expected ';' before '}' token
+    5 |     return 0
+      |             ^
+      |             ;
+    6 | }
+      | ~            
+make: *** [Makefile:10: ciao] Error 1

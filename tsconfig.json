@@ -1,0 +1,16 @@
+{
+  // L'estensione: senza DOM, con le API dell'editor e di Node.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["vscode", "node"]
+  },
+  "include": ["src"]
+}
