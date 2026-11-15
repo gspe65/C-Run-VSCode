@@ -53,7 +53,8 @@ vscode.debug.registerDebugAdapterTrackerFactory("*", {
     onDidSendMessage: (m) => {
       if (m.type === "event") eventi.push({ evento: m.event, corpo: m.body });
       if (m.type === "response" && m.success === false) messaggi.push(`risposta fallita a ${m.command}: ${m.message ?? ""} ${JSON.stringify(m.body ?? {}).slice(0, 300)}`);
-      if (m.type === "event" && m.event === "output" && m.body?.category !== "stdout" && m.body?.category !== "telemetry") messaggi.push(`${m.body?.category}: ${String(m.body?.output).slice(0, 300)}`);
+      // Anche stdout: se il programma scrive nella console di debug invece che nel terminale, lo si vede qui.
+      if (m.type === "event" && m.event === "output" && m.body?.category !== "telemetry") messaggi.push(`${m.body?.category}: ${String(m.body?.output).slice(0, 300)}`);
       if (m.type === "request") messaggi.push(`richiesta al editor: ${m.command}`);
     },
     onError: (e) => messaggi.push(`errore: ${String(e)}`),

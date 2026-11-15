@@ -167,13 +167,17 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
   // «Passo passo», che dice il suo dispositivo. Altrove il terminale lo apre lldb-dap (`console` per le versioni nuove,
   // `runInTerminal` per quelle che non la conoscono).
   let comeSiCollega: Record<string, unknown> = { console: "integratedTerminal", runInTerminal: true };
+  const primaDellAvvio = conPunti ? [] : ["breakpoint set --name main --one-shot true"];
   if (process.platform === "linux") {
     const dispositivo = await terminaleDelPassoPasso(c.piano.cartella);
     if (dispositivo === undefined) {
       void vscode.window.showErrorMessage("Il terminale «Passo passo» non si è aperto: il passo passo non parte.");
       return false;
     }
+    // Misurato con lldb-dap 21: l'attributo `stdio` non collega il programma al terminale. Le impostazioni del bersaglio sì:
+    // le legge il lancio che lldb fa da sé.
     comeSiCollega = { console: "internalConsole", stdio: [dispositivo, dispositivo, dispositivo] };
+    primaDellAvvio.unshift(`settings set target.input-path ${dispositivo}`, `settings set target.output-path ${dispositivo}`, `settings set target.error-path ${dispositivo}`);
   }
   return vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(doc.uri), {
     type: "lldb-dap",
@@ -182,7 +186,7 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
     program: join(c.piano.cartella, c.programma),
     cwd: c.piano.cartella,
     ...comeSiCollega,
-    ...(conPunti ? {} : { preRunCommands: ["breakpoint set --name main --one-shot true"] }),
+    ...(primaDellAvvio.length > 0 ? { preRunCommands: primaDellAvvio } : {}),
   });
 }
 
