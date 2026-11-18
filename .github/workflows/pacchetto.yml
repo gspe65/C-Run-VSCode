@@ -1,5 +1,6 @@
-# Il pacchetto dell'estensione: costruito una volta, provato con l'editor vero su Windows, Ubuntu e macOS, contato, e solo
-# allora attestato e messo in una release sull'etichetta. Su un'etichetta v<versione del manifesto> fa tutto; lanciata a mano
+# Il pacchetto dell'estensione: costruito una volta e, su un'etichetta, attestato subito (l'attestazione dice da dove viene
+# il file, non se funziona: non aspetta le prove, e una macchina che manca non la ferma); provato con l'editor vero su
+# Windows, Ubuntu e macOS, contato, e solo allora messo in una release sull'etichetta. Su un'etichetta v<versione del manifesto> fa tutto; lanciata a mano
 # costruisce e prova senza release, e con `togli` lascia fuori un sistema dalla matrice: il conteggio deve dire rosso.
 #
 # I compilatori: su Windows clang e lldb-dap di llvm-mingw (scaricati con l'impronta da strumenti/strumenti.ts), make e gcc
@@ -27,6 +28,10 @@ concurrency:
 jobs:
   costruzione:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     outputs:
       nome: ${{ steps.pacchetto.outputs.nome }}
       sha256: ${{ steps.pacchetto.outputs.sha256 }}
@@ -58,6 +63,11 @@ jobs:
           name: pacchetto
           path: dist/*.vsix
           if-no-files-found: error
+      - name: L'attestazione della provenienza, sul file appena costruito
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/${{ steps.pacchetto.outputs.nome }}
 
   prova:
     needs: costruzione
@@ -142,8 +152,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -153,9 +161,6 @@ jobs:
       - name: Il file è quello costruito e provato
         run: |
           echo "${{ needs.costruzione.outputs.sha256 }}  pacchetto/${{ needs.costruzione.outputs.nome }}" | sha256sum -c -
-      - uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: pacchetto/${{ needs.costruzione.outputs.nome }}
       - name: La release sull'etichetta
         env:
           GH_TOKEN: ${{ github.token }}
