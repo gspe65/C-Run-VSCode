@@ -157,4 +157,36 @@ exports.run = async () => {
   s2.dispose();
   await pausa(1000);
   salva();
+
+  // 6. Di nuovo il passo passo col punto d'arresto: l'editor riusa il terminale del debugger, che non si apre di nuovo. Il
+  // cursore deve andare lì: si «digita» con il comando dell'editor, che scrive nel file solo se il fuoco è nel file. Prima, il
+  // controllo: col fuoco nel file la stessa digitazione lo sporca (e si annulla).
+  const ed6 = await apri("leggi", "leggi.c");
+  await vscode.window.showTextDocument(ed6.document, { preview: false });
+  await vscode.commands.executeCommand("type", { text: "x" });
+  const controllo = ed6.document.isDirty;
+  if (controllo) await vscode.commands.executeCommand("workbench.action.files.revert");
+  vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(ed6.document.uri, new vscode.Position(7, 0)))]);
+  eventi.length = 0;
+  aperti.length = 0;
+  sessione = undefined;
+  const s3 = vscode.debug.onDidStartDebugSession((s) => (sessione = s));
+  await vscode.commands.executeCommand("c-run.passoPasso");
+  await attendi(() => eventi.some((e) => e.evento === "process"), 45000);
+  await pausa(2000);
+  await vscode.commands.executeCommand("type", { text: "x" });
+  await pausa(300);
+  const sporco = ed6.document.isDirty;
+  if (sporco) await vscode.commands.executeCommand("workbench.action.files.revert");
+  // Il terminale del programma: quello nuovo se si è aperto, se no quello riusato (l'ultimo che non è «Programma C»).
+  const delDebug6 = aperti.find((t) => t.creationOptions?.name !== NOME) ?? vscode.window.terminals.filter((t) => t.creationOptions?.name !== NOME && t.exitStatus === undefined).at(-1);
+  esiti.riuso = { controllo, sporco, nuovoTerminale: aperti.length > 0 };
+  delDebug6?.sendText("21", true);
+  esiti.riuso.fermo = await attendi(() => eventi.some((e) => e.evento === "stopped"), 20000);
+  if (esiti.riuso.fermo && sessione) Object.assign(esiti.riuso, await fermoSu(sessione));
+  if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();
+  vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+  s3.dispose();
+  await pausa(1000);
+  salva();
 };

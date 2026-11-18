@@ -49,7 +49,7 @@ function mostraNelPannello(segnalazioni: Segnalazione[], fonte: string): void {
  *  (misurato: senza, il motore parte come una seconda finestra dell'editor, passa il file a quella aperta ed esce). */
 function apriIlTerminale(righe: Riga[], cartella: string, programma: string | undefined, prendeIlFuoco: boolean): void {
   terminale?.dispose();
-  const tutte = programma === undefined ? righe : [...righe, { testo: `Eseguo ${programma}:` }];
+  const tutte = programma === undefined ? righe : [...righe, { testo: `Eseguo ${programma} (se legge qualcosa, scrivilo qui e premi Invio):` }];
   const dato = Buffer.from(JSON.stringify(tutte)).toString("base64");
   const motore = process.execPath;
   const scrittore = join(cartellaDellEstensione, "dist", "terminale.cjs");
@@ -74,9 +74,16 @@ function apriIlTerminale(righe: Riga[], cartella: string, programma: string | un
   terminale.show(!prendeIlFuoco);
 }
 
+/** Il file C che i comandi della barra nominano: quello attivo, se no il primo C visibile (per esempio accanto a una pagina
+ *  che non è un file di testo). */
+function fileCVisibile(): vscode.TextDocument | undefined {
+  const attivo = vscode.window.activeTextEditor?.document;
+  return attivo?.languageId === "c" ? attivo : vscode.window.visibleTextEditors.find((e) => e.document.languageId === "c")?.document;
+}
+
 /** Il file C su cui lavorare, salvato. */
 async function fileC(uri?: vscode.Uri): Promise<vscode.TextDocument | undefined> {
-  const doc = uri !== undefined ? await vscode.workspace.openTextDocument(uri) : (vscode.window.activeTextEditor ?? vscode.window.visibleTextEditors.find((e) => e.document.languageId === "c"))?.document;
+  const doc = uri !== undefined ? await vscode.workspace.openTextDocument(uri) : fileCVisibile();
   if (doc === undefined || doc.languageId !== "c" || doc.uri.scheme !== "file") {
     void vscode.window.showWarningMessage("Apri un file .c: i comandi compilano il programma del file aperto.");
     return undefined;
@@ -157,9 +164,13 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
   if (c === undefined) return false;
   // Senza punti d'arresto nel file, il programma si ferma sulla prima riga di main: se no correrebbe fino alla fine.
   const conPunti = vscode.debug.breakpoints.some((b) => b.enabled && b instanceof vscode.SourceBreakpoint && b.location.uri.fsPath.toLowerCase() === doc.uri.fsPath.toLowerCase());
-  // Il terminale del debugger prende il fuoco: lo studente scrive lì ciò che il programma legge, non nel file.
+  // Il terminale del debugger prende il fuoco: lo studente scrive lì ciò che il programma legge, non nel file. Quando
+  // l'editor lo riusa (dal secondo passo passo) non si apre di nuovo: lo rimette davanti l'evento «process» (in attivazione).
   const sub = vscode.window.onDidOpenTerminal((t) => {
-    if (t !== terminale && t !== terminaleDelPasso) t.show(false);
+    if (t !== terminale && t !== terminaleDelPasso) {
+      terminaleDelDebug = t;
+      t.show(false);
+    }
   });
   setTimeout(() => sub.dispose(), 30000);
   // Su Linux il debugger non può agganciarsi a un programma lanciato dal terminale (il kernel lascia tracciare solo i figli:
@@ -185,12 +196,16 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
     name: "Passo passo",
     program: join(c.piano.cartella, c.programma),
     cwd: c.piano.cartella,
+    // La console di debug non viene davanti da sola: davanti resta il terminale dove il programma legge.
+    internalConsoleOptions: "neverOpen",
     ...comeSiCollega,
     ...(primaDellAvvio.length > 0 ? { preRunCommands: primaDellAvvio } : {}),
   });
 }
 
 let terminaleDelPasso: vscode.Terminal | undefined;
+/** Il terminale che l'editor apre (e poi riusa) per il programma del passo passo, fuori da Linux. */
+let terminaleDelDebug: vscode.Terminal | undefined;
 
 /** Su Linux: il terminale «Passo passo», che scrive il nome del suo dispositivo in un file e poi resta fermo; il programma
  *  in debug legge e scrive lì. Il dispositivo, o nulla se non arriva entro 10 secondi. */
@@ -221,15 +236,26 @@ async function terminaleDelPassoPasso(cartella: string): Promise<string | undefi
 export function activate(context: vscode.ExtensionContext): void {
   cartellaDellEstensione = context.extensionPath;
   problemi = vscode.languages.createDiagnosticCollection("c-run");
+  // Nella barra un solo triangolo, col nome del file su cui agisce. Durante una sessione di debug i due comandi spariscono:
+  // il triangolo che resta è «Continua» della barra del debug.
   const esegui = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  esegui.text = "$(play) Compila ed esegui";
-  esegui.command = "c-run.compilaEdEsegui";
   const passo = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-  passo.text = "$(debug-alt) Passo passo";
-  passo.command = "c-run.passoPasso";
   const aggiorna = () => {
-    const c = (vscode.window.activeTextEditor ?? vscode.window.visibleTextEditors.find((e) => e.document.languageId === "c"))?.document.languageId === "c";
-    for (const v of [esegui, passo]) c ? v.show() : v.hide();
+    const doc = fileCVisibile();
+    if (doc === undefined || vscode.debug.activeDebugSession !== undefined) {
+      esegui.hide();
+      passo.hide();
+      return;
+    }
+    const nome = basename(doc.uri.fsPath);
+    esegui.text = `$(play) Compila ed esegui ${nome}`;
+    esegui.tooltip = `Compila ${nome} e lo esegue nel terminale «${NOME_DEL_TERMINALE}»`;
+    esegui.command = { command: "c-run.compilaEdEsegui", title: "Compila ed esegui", arguments: [doc.uri] };
+    passo.text = `$(bug) Passo passo ${nome}`;
+    passo.tooltip = `Compila ${nome} e lo segue passo passo: si ferma sui punti d'arresto (il clic a sinistra del numero di riga)`;
+    passo.command = { command: "c-run.passoPasso", title: "Passo passo", arguments: [doc.uri] };
+    esegui.show();
+    passo.show();
   };
   aggiorna();
   context.subscriptions.push(
@@ -238,8 +264,21 @@ export function activate(context: vscode.ExtensionContext): void {
     passo,
     vscode.window.onDidChangeActiveTextEditor(aggiorna),
     vscode.window.onDidChangeVisibleTextEditors(aggiorna),
+    vscode.debug.onDidChangeActiveDebugSession(aggiorna),
+    // Quando il programma del passo passo è partito, il suo terminale davanti e col cursore (anche se l'editor l'ha riusato).
+    vscode.debug.registerDebugAdapterTrackerFactory("lldb-dap", {
+      createDebugAdapterTracker: (s) =>
+        s.name !== "Passo passo"
+          ? undefined
+          : {
+              onDidSendMessage: (m: { type?: string; event?: string }) => {
+                if (m.type === "event" && m.event === "process") (process.platform === "linux" ? terminaleDelPasso : terminaleDelDebug)?.show(false);
+              },
+            },
+    }),
     vscode.window.onDidCloseTerminal((t) => {
       if (t === terminale) terminale = undefined;
+      if (t === terminaleDelDebug) terminaleDelDebug = undefined;
     }),
     vscode.commands.registerCommand("c-run.compilaEdEsegui", compilaEdEsegui),
     vscode.commands.registerCommand("c-run.passoPasso", passoPasso),

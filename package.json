@@ -2,7 +2,7 @@
   "name": "C-Run",
   "displayName": "C: compila, esegui, passo passo",
   "description": "Compila ed esegue con un clic il programma C del file aperto, o lo segue passo passo.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "gilan65",
   "license": "MIT",
   "private": true,
@@ -13,13 +13,9 @@
   "contributes": {
     "commands": [
       { "command": "c-run.compilaEdEsegui", "title": "Compila ed esegui", "category": "C", "icon": "$(play)" },
-      { "command": "c-run.passoPasso", "title": "Passo passo", "category": "C", "icon": "$(debug-alt)" }
+      { "command": "c-run.passoPasso", "title": "Passo passo", "category": "C", "icon": "$(bug)" }
     ],
     "menus": {
-      "editor/title": [
-        { "command": "c-run.compilaEdEsegui", "when": "resourceLangId == c", "group": "navigation@1" },
-        { "command": "c-run.passoPasso", "when": "resourceLangId == c", "group": "navigation@2" }
-      ],
       "commandPalette": [
         { "command": "c-run.compilaEdEsegui", "when": "editorLangId == c" },
         { "command": "c-run.passoPasso", "when": "editorLangId == c" }
