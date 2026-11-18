@@ -4,9 +4,14 @@
 // subito la fine dell'ingresso). La coda resta aperta, perché un terminale il cui processo esce si chiude, e l'uscita del
 // programma si perderebbe.
 //
-//   <motore> terminale.cjs testa <righe in JSON, in base64>    scrive le righe ed esce
-//   <motore> terminale.cjs solo  <righe in JSON, in base64>    scrive le righe e resta (nessun programma da eseguire)
-//   <motore> terminale.cjs coda  <codice d'uscita>             scrive com'è finito e resta
+//   <motore> terminale.cjs testa <file delle righe, in JSON>    scrive le righe, toglie il file ed esce
+//   <motore> terminale.cjs solo  <file delle righe, in JSON>    scrive le righe, toglie il file e resta (nessun programma da eseguire)
+//   <motore> terminale.cjs coda  <codice d'uscita>              scrive com'è finito e resta
+//
+// Le righe arrivano in un file, non sulla riga di comando: l'uscita del compilatore non ha un tetto, la riga di comando di cmd
+// sì (8.191 caratteri), e oltre il tetto non partirebbe nulla.
+
+import { readFileSync, rmSync } from "node:fs";
 
 type Riga = { testo: string; grigio?: boolean };
 
@@ -24,6 +29,13 @@ if (modo === "coda") {
 } else {
   // Il titolo della scheda: senza, l'editor mostra il nome del processo, non «Programma C».
   process.stdout.write("\x1b]0;Programma C\x07");
-  for (const r of JSON.parse(Buffer.from(dato ?? "", "base64").toString("utf8")) as Riga[]) scrivi(r.testo, r.grigio);
+  let righe: Riga[];
+  try {
+    righe = JSON.parse(readFileSync(dato ?? "", "utf8")) as Riga[];
+  } catch (e) {
+    righe = [{ testo: `(le righe della compilazione non si leggono: ${e instanceof Error ? e.message : String(e)})` }];
+  }
+  rmSync(dato ?? "", { force: true });
+  for (const r of righe) scrivi(r.testo, r.grigio);
   if (modo === "solo") resta();
 }

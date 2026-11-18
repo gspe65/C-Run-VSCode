@@ -1,0 +1,91 @@
+avvisi.c:6:9: warning: unused variable 'variabile_che_non_serve_a_nulla_01' [-Wunused-variable]
+    6 |     int variabile_che_non_serve_a_nulla_01 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:7:9: warning: unused variable 'variabile_che_non_serve_a_nulla_02' [-Wunused-variable]
+    7 |     int variabile_che_non_serve_a_nulla_02 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:8:9: warning: unused variable 'variabile_che_non_serve_a_nulla_03' [-Wunused-variable]
+    8 |     int variabile_che_non_serve_a_nulla_03 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:9:9: warning: unused variable 'variabile_che_non_serve_a_nulla_04' [-Wunused-variable]
+    9 |     int variabile_che_non_serve_a_nulla_04 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:10:9: warning: unused variable 'variabile_che_non_serve_a_nulla_05' [-Wunused-variable]
+   10 |     int variabile_che_non_serve_a_nulla_05 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:11:9: warning: unused variable 'variabile_che_non_serve_a_nulla_06' [-Wunused-variable]
+   11 |     int variabile_che_non_serve_a_nulla_06 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:12:9: warning: unused variable 'variabile_che_non_serve_a_nulla_07' [-Wunused-variable]
+   12 |     int variabile_che_non_serve_a_nulla_07 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:13:9: warning: unused variable 'variabile_che_non_serve_a_nulla_08' [-Wunused-variable]
+   13 |     int variabile_che_non_serve_a_nulla_08 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:14:9: warning: unused variable 'variabile_che_non_serve_a_nulla_09' [-Wunused-variable]
+   14 |     int variabile_che_non_serve_a_nulla_09 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:15:9: warning: unused variable 'variabile_che_non_serve_a_nulla_10' [-Wunused-variable]
+   15 |     int variabile_che_non_serve_a_nulla_10 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:16:9: warning: unused variable 'variabile_che_non_serve_a_nulla_11' [-Wunused-variable]
+   16 |     int variabile_che_non_serve_a_nulla_11 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:17:9: warning: unused variable 'variabile_che_non_serve_a_nulla_12' [-Wunused-variable]
+   17 |     int variabile_che_non_serve_a_nulla_12 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:18:9: warning: unused variable 'variabile_che_non_serve_a_nulla_13' [-Wunused-variable]
+   18 |     int variabile_che_non_serve_a_nulla_13 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:19:9: warning: unused variable 'variabile_che_non_serve_a_nulla_14' [-Wunused-variable]
+   19 |     int variabile_che_non_serve_a_nulla_14 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:20:9: warning: unused variable 'variabile_che_non_serve_a_nulla_15' [-Wunused-variable]
+   20 |     int variabile_che_non_serve_a_nulla_15 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:21:9: warning: unused variable 'variabile_che_non_serve_a_nulla_16' [-Wunused-variable]
+   21 |     int variabile_che_non_serve_a_nulla_16 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:22:9: warning: unused variable 'variabile_che_non_serve_a_nulla_17' [-Wunused-variable]
+   22 |     int variabile_che_non_serve_a_nulla_17 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:23:9: warning: unused variable 'variabile_che_non_serve_a_nulla_18' [-Wunused-variable]
+   23 |     int variabile_che_non_serve_a_nulla_18 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:24:9: warning: unused variable 'variabile_che_non_serve_a_nulla_19' [-Wunused-variable]
+   24 |     int variabile_che_non_serve_a_nulla_19 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:25:9: warning: unused variable 'variabile_che_non_serve_a_nulla_20' [-Wunused-variable]
+   25 |     int variabile_che_non_serve_a_nulla_20 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:26:9: warning: unused variable 'variabile_che_non_serve_a_nulla_21' [-Wunused-variable]
+   26 |     int variabile_che_non_serve_a_nulla_21 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:27:9: warning: unused variable 'variabile_che_non_serve_a_nulla_22' [-Wunused-variable]
+   27 |     int variabile_che_non_serve_a_nulla_22 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:28:9: warning: unused variable 'variabile_che_non_serve_a_nulla_23' [-Wunused-variable]
+   28 |     int variabile_che_non_serve_a_nulla_23 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:29:9: warning: unused variable 'variabile_che_non_serve_a_nulla_24' [-Wunused-variable]
+   29 |     int variabile_che_non_serve_a_nulla_24 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:30:9: warning: unused variable 'variabile_che_non_serve_a_nulla_25' [-Wunused-variable]
+   30 |     int variabile_che_non_serve_a_nulla_25 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:31:9: warning: unused variable 'variabile_che_non_serve_a_nulla_26' [-Wunused-variable]
+   31 |     int variabile_che_non_serve_a_nulla_26 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:32:9: warning: unused variable 'variabile_che_non_serve_a_nulla_27' [-Wunused-variable]
+   32 |     int variabile_che_non_serve_a_nulla_27 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:33:9: warning: unused variable 'variabile_che_non_serve_a_nulla_28' [-Wunused-variable]
+   33 |     int variabile_che_non_serve_a_nulla_28 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:34:9: warning: unused variable 'variabile_che_non_serve_a_nulla_29' [-Wunused-variable]
+   34 |     int variabile_che_non_serve_a_nulla_29 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+avvisi.c:35:9: warning: unused variable 'variabile_che_non_serve_a_nulla_30' [-Wunused-variable]
+   35 |     int variabile_che_non_serve_a_nulla_30 = 1; /* una riga lunga, perche' sia lunga anche la riga che il compilatore cita */
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+30 warnings generated.

@@ -2,11 +2,11 @@
 // «Programma C» e l'avvio del passo passo. La logica sta in piano.ts.
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
 import * as vscode from "vscode";
-import { pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi, type Piano, type Riga, type Segnalazione } from "./piano";
+import { comandoDelTerminale, MANCA_IL_COMPILATORE, MANCA_MAKE, mancaLEstensioneDelDebug, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi, type Piano, type Riga, type Segnalazione } from "./piano";
 
 const NOME_DEL_TERMINALE = "Programma C";
 const ESTENSIONE_DEL_DEBUG = "llvm-vs-code-extensions.lldb-dap";
@@ -44,41 +44,36 @@ function mostraNelPannello(segnalazioni: Segnalazione[], fonte: string): void {
   for (const [file, d] of perFile) problemi.set(vscode.Uri.file(file), d);
 }
 
-/** Il terminale «Programma C»: sempre uno, rifatto a ogni avvio. Il processo è il motore dell'editor usato come Node.
- *  ELECTRON_RUN_AS_NODE la imposta la shell del sistema subito prima: l'editor la toglie dall'ambiente dei suoi terminali
- *  (misurato: senza, il motore parte come una seconda finestra dell'editor, passa il file a quella aperta ed esce). */
+/** Il terminale «Programma C»: sempre uno, rifatto a ogni avvio. Il processo è il motore dell'editor usato come Node
+ *  (misurato: senza ELECTRON_RUN_AS_NODE il motore parte come una seconda finestra dell'editor, passa il file a quella aperta
+ *  ed esce). Le righe vanno in un file temporaneo, che lo scrittore legge e toglie: sulla riga di comando di cmd non ci
+ *  starebbero (comandoDelTerminale in piano.ts). L'icona è quella del terminale, non un triangolo: il solo triangolo di
+ *  esecuzione è «Compila ed esegui», nella barra di stato. */
 function apriIlTerminale(righe: Riga[], cartella: string, programma: string | undefined, prendeIlFuoco: boolean): void {
   terminale?.dispose();
   const tutte = programma === undefined ? righe : [...righe, { testo: `Eseguo ${programma} (se legge qualcosa, scrivilo qui e premi Invio):` }];
-  const dato = Buffer.from(JSON.stringify(tutte)).toString("base64");
-  const motore = process.execPath;
-  const scrittore = join(cartellaDellEstensione, "dist", "terminale.cjs");
-  // Su Windows il codice d'uscita si legge con !errorlevel! (/v:on): %errorlevel% varrebbe quello di prima del programma.
-  const comando: Pick<vscode.TerminalOptions, "shellPath" | "shellArgs"> =
-    process.platform === "win32"
-      ? {
-          shellPath: process.env.ComSpec ?? "cmd.exe",
-          shellArgs:
-            programma === undefined
-              ? `/d /s /c "set ELECTRON_RUN_AS_NODE=1&& "${motore}" "${scrittore}" solo ${dato}"`
-              : `/d /v:on /s /c "set ELECTRON_RUN_AS_NODE=1&& "${motore}" "${scrittore}" testa ${dato} & "${join(cartella, programma)}" & "${motore}" "${scrittore}" coda !errorlevel!"`,
-        }
-      : {
-          shellPath: "/bin/sh",
-          shellArgs:
-            programma === undefined
-              ? ["-c", 'ELECTRON_RUN_AS_NODE=1 exec "$0" "$1" solo "$2"', motore, scrittore, dato]
-              : ["-c", 'ELECTRON_RUN_AS_NODE=1 "$0" "$1" testa "$2"; "$3"; c=$?; ELECTRON_RUN_AS_NODE=1 exec "$0" "$1" coda "$c"', motore, scrittore, dato, join(cartella, programma)],
-        };
-  terminale = vscode.window.createTerminal({ name: NOME_DEL_TERMINALE, ...comando, cwd: cartella, iconPath: new vscode.ThemeIcon("play") });
+  const fileDelleRighe = join(tmpdir(), `c-run-righe-${process.pid}-${Date.now()}-${++numeroDelleRighe}.json`);
+  writeFileSync(fileDelleRighe, JSON.stringify(tutte), "utf8");
+  const comando = comandoDelTerminale({
+    sistema: process.platform,
+    comSpec: process.env.ComSpec,
+    motore: process.execPath,
+    scrittore: join(cartellaDellEstensione, "dist", "terminale.cjs"),
+    fileDelleRighe,
+    programma: programma === undefined ? undefined : join(cartella, programma),
+  });
+  terminale = vscode.window.createTerminal({ name: NOME_DEL_TERMINALE, ...comando, cwd: cartella, iconPath: new vscode.ThemeIcon(ICONA_DEL_TERMINALE) });
   terminale.show(!prendeIlFuoco);
 }
+let numeroDelleRighe = 0;
+const ICONA_DEL_TERMINALE = "terminal";
 
 /** Il file C che i comandi della barra nominano: quello attivo, se no il primo C visibile (per esempio accanto a una pagina
- *  che non è un file di testo). */
+ *  che non è un file di testo). Solo un file del disco: un documento senza nome o di un'altra estensione non si compila. */
 function fileCVisibile(): vscode.TextDocument | undefined {
+  const eC = (d: vscode.TextDocument | undefined) => d?.languageId === "c" && d.uri.scheme === "file";
   const attivo = vscode.window.activeTextEditor?.document;
-  return attivo?.languageId === "c" ? attivo : vscode.window.visibleTextEditors.find((e) => e.document.languageId === "c")?.document;
+  return eC(attivo) ? attivo : vscode.window.visibleTextEditors.find((e) => eC(e.document))?.document;
 }
 
 /** Il file C su cui lavorare, salvato. */
@@ -100,11 +95,11 @@ async function compilaIlFile(doc: vscode.TextDocument, perPassoPasso: boolean): 
   const compilatore = scegliCompilatore(scritto, esiste);
   const piano = pianoDiCompilazione({ file, haMakefile, sistema: process.platform, compilatore, perPassoPasso });
   if (piano.come === "makefile" && !esiste("make")) {
-    apriIlTerminale([{ testo: "Questo programma ha un Makefile, ma il comando make non c'è: il programma non parte." }], piano.cartella, undefined, false);
+    apriIlTerminale([{ testo: MANCA_MAKE }], piano.cartella, undefined, false);
     return undefined;
   }
   if (piano.come === "file" && compilatore === undefined) {
-    apriIlTerminale([{ testo: "Non trovo un compilatore C (clang, gcc o cc): il programma non parte." }], piano.cartella, undefined, false);
+    apriIlTerminale([{ testo: MANCA_IL_COMPILATORE }], piano.cartella, undefined, false);
     return undefined;
   }
   const inizio = Date.now() - 1000;
@@ -157,7 +152,7 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
   const doc = await fileC(uri);
   if (doc === undefined) return false;
   if (vscode.extensions.getExtension(ESTENSIONE_DEL_DEBUG) === undefined) {
-    void vscode.window.showErrorMessage(`Per andare passo passo serve l'estensione «LLDB DAP» (${ESTENSIONE_DEL_DEBUG}).`);
+    void vscode.window.showErrorMessage(mancaLEstensioneDelDebug(ESTENSIONE_DEL_DEBUG));
     return false;
   }
   const c = await compilaIlFile(doc, true);
@@ -240,13 +235,17 @@ export function activate(context: vscode.ExtensionContext): void {
   // il triangolo che resta è «Continua» della barra del debug.
   const esegui = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   const passo = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+  // Lo stato delle due voci, per le prove: l'editor non dice che cosa mostra la barra di stato.
+  let visibili = false;
   const aggiorna = () => {
     const doc = fileCVisibile();
     if (doc === undefined || vscode.debug.activeDebugSession !== undefined) {
       esegui.hide();
       passo.hide();
+      visibili = false;
       return;
     }
+    visibili = true;
     const nome = basename(doc.uri.fsPath);
     esegui.text = `$(play) Compila ed esegui ${nome}`;
     esegui.tooltip = `Compila ${nome} e lo esegue nel terminale «${NOME_DEL_TERMINALE}»`;
@@ -292,6 +291,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("c-run.compilaEdEsegui", compilaEdEsegui),
     vscode.commands.registerCommand("c-run.passoPasso", passoPasso),
+    // Non nel manifesto, quindi non nella tavolozza dei comandi: le voci della barra come le vede chi usa l'editor.
+    vscode.commands.registerCommand("c-run.statoDellaBarra", () => ({ voci: visibili ? [esegui.text, passo.text] : [] })),
   );
 }
 
