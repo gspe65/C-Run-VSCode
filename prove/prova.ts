@@ -323,9 +323,12 @@ async function nellEditor(eseguibile: string): Promise<void> {
   prova("il terminale «Programma C» ha l'icona del terminale, non un triangolo", e.ciao?.icona === "terminal", String(e.ciao?.icona));
   const avvisi = e.avvisi?.testo ?? "";
   prova("trenta avvisi del compilatore: il terminale li mostra e il programma parte", (avvisi.match(/warning:/g) ?? []).length === 30 && avvisi.includes("Partito nonostante gli avvisi") && avvisi.includes("(finito: uscita 0)"), avvisi.slice(-1500));
-  // La premessa della prova del riuso: l'editor ha riusato il terminale del passo passo. Se ne ha aperto uno nuovo, la prova
-  // non dice nulla del riuso: non si conta, e l'esito è FERMO.
-  if (e.riuso?.nuovoTerminale !== false) premesseMancanti.push(`passo passo di nuovo: l'editor non ha riusato il terminale del debugger (${JSON.stringify(e.riuso)})`);
+  // La premessa della prova del passo passo di nuovo, per sistema. Su Windows e macOS il terminale lo apre lldb-dap e l'editor
+  // lo riusa: se ne apre uno nuovo, la prova non dice nulla del riuso. Su Linux l'estensione rifà il terminale «Passo passo» a
+  // ogni avvio (extension.ts, terminaleDelPassoPasso): lì il terminale è nuovo, e se non si apre la prova non dice nulla.
+  // In tutti e due i casi la prova non si conta, e l'esito è FERMO.
+  const terminaleNuovoAtteso = process.platform === "linux";
+  if (e.riuso?.nuovoTerminale !== terminaleNuovoAtteso) premesseMancanti.push(`passo passo di nuovo: ${terminaleNuovoAtteso ? "su Linux il terminale «Passo passo» non si è rifatto" : "l'editor non ha riusato il terminale del debugger"} (${JSON.stringify(e.riuso)})`);
   // Il controllo della digitazione deve sporcare il file col fuoco nel file, se no la prova dopo non discrimina.
   const cursoreNelTerminale = e.riuso?.controllo === true && e.riuso?.sporco === false;
   if (process.platform === "darwin") {
