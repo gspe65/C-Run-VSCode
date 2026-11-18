@@ -97,7 +97,7 @@ test("il comando del terminale con trenta diagnostiche: le righe restano nel fil
   // Il controllo: le stesse righe sulla riga di comando (com'era prima, in base64) supererebbero il limite.
   expect(Buffer.from(JSON.stringify(righe)).toString("base64").length).toBeGreaterThan(LIMITE_DELLA_RIGA_DI_CMD);
   const motore = join("C:", "una  cartella  dal  nome  lungo".repeat(4), "vscodium", "VSCodium.exe");
-  const c = comandoDelTerminale({ sistema: "win32", comSpec: "C:\\Windows\\system32\\cmd.exe", motore, scrittore: join(motore, "..", "dist", "terminale.cjs"), fileDelleRighe: join("C:", "Temp", "c-run-righe-1-1.json"), programma: join(cartella, "avvisi.exe") });
+  const c = comandoDelTerminale({ sistema: "win32", comSpec: join("C:", "Windows", "system32", "cmd.exe"), motore, scrittore: join(motore, "..", "dist", "terminale.cjs"), fileDelleRighe: join("C:", "Temp", "c-run-righe-1-1.json"), programma: join(cartella, "avvisi.exe") });
   const riga = `${c.shellPath} ${String(c.shellArgs)}`;
   expect(riga.length).toBeLessThan(LIMITE_DELLA_RIGA_DI_CMD);
   expect(riga).not.toContain("unused variable");
