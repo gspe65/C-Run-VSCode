@@ -266,15 +266,25 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeVisibleTextEditors(aggiorna),
     vscode.debug.onDidChangeActiveDebugSession(aggiorna),
     // Quando il programma del passo passo è partito, il suo terminale davanti e col cursore (anche se l'editor l'ha riusato).
+    // Due momenti: la risposta dell'editor alla richiesta di lanciare il programma nel terminale (l'editor ha finito di
+    // usarlo), e l'evento «process» (il debugger è agganciato), con una seconda volta poco dopo. Misurato su macOS: col solo
+    // evento «process» il cursore restava nel file, perché l'evento arriva prima che l'editor abbia finito col terminale.
     vscode.debug.registerDebugAdapterTrackerFactory("lldb-dap", {
-      createDebugAdapterTracker: (s) =>
-        s.name !== "Passo passo"
-          ? undefined
-          : {
-              onDidSendMessage: (m: { type?: string; event?: string }) => {
-                if (m.type === "event" && m.event === "process") (process.platform === "linux" ? terminaleDelPasso : terminaleDelDebug)?.show(false);
-              },
-            },
+      createDebugAdapterTracker: (s) => {
+        if (s.name !== "Passo passo") return undefined;
+        const davanti = () => (process.platform === "linux" ? terminaleDelPasso : terminaleDelDebug)?.show(false);
+        return {
+          onWillReceiveMessage: (m: { type?: string; command?: string }) => {
+            if (m.type === "response" && m.command === "runInTerminal") setTimeout(davanti, 300);
+          },
+          onDidSendMessage: (m: { type?: string; event?: string }) => {
+            if (m.type === "event" && m.event === "process") {
+              davanti();
+              setTimeout(davanti, 1000);
+            }
+          },
+        };
+      },
     }),
     vscode.window.onDidCloseTerminal((t) => {
       if (t === terminale) terminale = undefined;
