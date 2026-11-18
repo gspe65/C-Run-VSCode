@@ -2,7 +2,8 @@
 // `prova.ts`. Il testo del terminale si legge come lo vede lo studente: selezionato tutto e copiato.
 //
 // I passi: il progetto col Makefile; il file da solo con l'ingresso 21; un errore messo apposta; il passo passo con un
-// punto d'arresto e l'ingresso; il passo passo senza punti d'arresto.
+// punto d'arresto e l'ingresso; il passo passo senza punti d'arresto; di nuovo nel terminale riusato; trenta avvisi del
+// compilatore; un documento C senza nome. Lo stato delle voci della barra lo dà il comando c-run.statoDellaBarra.
 
 const { existsSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
@@ -87,8 +88,9 @@ exports.run = async () => {
   esiti.terminalePrima = await testoDel(programmaC());
   await vscode.commands.executeCommand("c-run.compilaEdEsegui");
   await attendi(async () => (await testoDel(programmaC())).includes("(finito:"), 30000);
-  esiti.ciao = { testo: await testoDel(programmaC()), titoli: titoli() };
+  esiti.ciao = { testo: await testoDel(programmaC()), titoli: titoli(), icona: programmaC()?.creationOptions?.iconPath?.id ?? null };
   esiti.comandiNelTitolo = (await vscode.commands.getCommands(true)).filter((c) => c.startsWith("c-run.")).sort();
+  esiti.barraConUnFile = await vscode.commands.executeCommand("c-run.statoDellaBarra");
   salva();
 
   // 2. Il file da solo, con l'ingresso.
@@ -133,6 +135,7 @@ exports.run = async () => {
   delDebug?.sendText("21", true);
   esiti.passo.fermo = await attendi(() => eventi.some((e) => e.evento === "stopped"), 20000);
   if (esiti.passo.fermo && sessione) {
+    esiti.passo.barra = await vscode.commands.executeCommand("c-run.statoDellaBarra");
     Object.assign(esiti.passo, await fermoSu(sessione));
     await sessione.customRequest("continue", { threadId: esiti.passo.threadId });
   }
@@ -188,5 +191,21 @@ exports.run = async () => {
   vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
   s3.dispose();
   await pausa(1000);
+  salva();
+
+  // 7. Trenta avvisi del compilatore: le loro righe non stanno sulla riga di comando di cmd, e il programma deve partire.
+  await apri("avvisi", "avvisi.c");
+  await vscode.commands.executeCommand("c-run.compilaEdEsegui");
+  await attendi(async () => (await testoDel(programmaC())).includes("(finito:"), 30000);
+  esiti.avvisi = { testo: await testoDel(programmaC()) };
+  salva();
+
+  // 8. Un documento C senza nome (non sul disco): i comandi della barra non ci sono.
+  await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({ language: "c", content: "int main(void) { return 0; }\n" }));
+  await pausa(500);
+  esiti.senzaNome = { schema: vscode.window.activeTextEditor?.document.uri.scheme, barra: await vscode.commands.executeCommand("c-run.statoDellaBarra") };
+  // Chiuso senza salvare: un documento senza nome modificato fermerebbe la chiusura dell'editor con una domanda.
+  await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
   salva();
 };

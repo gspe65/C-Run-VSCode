@@ -30,16 +30,18 @@ const { values: opzioni } = parseArgs({
 });
 
 /** I denominatori, dichiarati prima della corsa: le chiamate a `prova` senza editor, e quelle in più con l'editor. */
-const PROVE_SENZA_EDITOR = 16;
-const PROVE_DELL_EDITOR = 18;
-const TEST_ATTESI = 13;
+const PROVE_SENZA_EDITOR = 17;
+const PROVE_DELL_EDITOR = 23;
+const TEST_ATTESI = 15;
+/** Le icone col triangolo di esecuzione: nella barra ce ne dev'essere una sola. */
+const TRIANGOLI = /\$\((play|run|debug-start|debug-continue|triangle-right)\)/g;
 
 /** Ciò che il pacchetto contiene, e nient'altro. */
 const NEL_PACCHETTO = ["[Content_Types].xml", "extension.vsixmanifest", "extension/LICENSE.txt", "extension/dist/extension.cjs", "extension/dist/terminale.cjs", "extension/package.json", "extension/readme.md"];
 /** Le voci che sono file del repository così come sono. Il README vsce lo mette sempre. */
 const DAL_REPOSITORY: Record<string, string> = { "extension/package.json": "package.json", "extension/LICENSE.txt": "LICENSE", "extension/readme.md": "README.md" };
 /** Che cosa può importare ciascun programma del pacchetto: l'editor e i moduli di Node, nient'altro. */
-const IMPORT_ATTESI: Record<string, string[]> = { "extension/dist/extension.cjs": ["node:child_process", "node:fs", "node:os", "node:path", "vscode"], "extension/dist/terminale.cjs": [] };
+const IMPORT_ATTESI: Record<string, string[]> = { "extension/dist/extension.cjs": ["node:child_process", "node:fs", "node:os", "node:path", "vscode"], "extension/dist/terminale.cjs": ["node:fs"] };
 const PERCORSO_ASSOLUTO = /(?<![A-Za-z])[A-Za-z]:[\\/]/;
 const VIETATE = [/bun:/, /Bun\./];
 
@@ -55,6 +57,10 @@ process.on("exit", () => {
 
 let fatte = 0;
 const fallite: string[] = [];
+/** Le premesse di una prova che non si sono avverate: la prova non dice nulla, e l'esito è FERMO. */
+const premesseMancanti: string[] = [];
+/** Gli esiti dei limiti dichiarati nel README, scritti nel rapporto senza contarli. */
+const limiti: string[] = [];
 function prova(nome: string, buona: boolean, dettaglio = ""): void {
   fatte++;
   console.log(`${buona ? "PASS" : "FAIL"}  ${nome}${buona ? "" : `\n      ${dettaglio}`}`);
@@ -192,7 +198,7 @@ prova("controllo: le voci vere, copiate senza mutazioni, sono verdi", motiviDell
 }
 {
   const m = mutata((v) => (v.set("extension/dist/terminale.cjs", Buffer.concat([v.get("extension/dist/terminale.cjs") ?? new Uint8Array(), Buffer.from('\nif (false) require("node:net");')])), 1));
-  mutazione("un import in più nel programma del terminale", m.toccate, motiviDelleVoci(m.voci), ["extension/dist/terminale.cjs: importa node:net"]);
+  mutazione("un import in più nel programma del terminale", m.toccate, motiviDelleVoci(m.voci), ["extension/dist/terminale.cjs: importa node:fs, node:net"]);
 }
 {
   const m = mutata((v) => (v.set(EXTRA, testo(`module.exports = ["${assoluto("C", "\\\\")}a", "bun:sqlite"];`)), 1));
@@ -204,6 +210,11 @@ const manifestoVero = JSON.parse(readFileSync(join(estratto, "extension", "packa
 prova("mutazione: un comando con l'icona nel titolo dell'editor è rosso", comandiSenzaTitolo(manifestoVero) && !comandiSenzaTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, menus: { ...manifestoVero.contributes?.menus, "editor/title": [{ command: "c-run.compilaEdEsegui", when: "resourceLangId == c" }] } } }));
 prova("mutazione: un comando che manca è rosso", !comandiSenzaTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, commands: (manifestoVero.contributes?.commands ?? []).filter((c) => c.command !== "c-run.passoPasso") } }));
 prova("mutazione: il lettore del sistema con una voce in più non torna", differenze(voci.keys(), [...contenuto, "extension/x"]).soloB.join() === "extension/x");
+
+// --- Il conteggio dei rapporti della corsa: le sue sonde, un rosso per ramo (prove/conteggio.ts --sonde).
+const sondeDelConteggio = esegui(["bun", join(RADICE, "prove", "conteggio.ts"), "--sonde"]);
+console.log(sondeDelConteggio.testo.trim());
+prova("il conteggio dei rapporti: ogni ramo rosso si accende da solo, il verde resta verde", sondeDelConteggio.uscita === 0 && /^ESITO: VERDE/m.test(sondeDelConteggio.testo), sondeDelConteggio.testo);
 
 // --- Nell'editor dato.
 function strumentiDa(file: string): Record<string, string> {
@@ -230,7 +241,7 @@ async function nellEditor(eseguibile: string): Promise<void> {
   const eseguibileDiDebug = lldbDap(strumenti);
   console.log(`lldb-dap: ${eseguibileDiDebug}`);
 
-  // Il PATH dell'editor: su Windows make e gcc di MSYS, poi clang e lldb-dap di llvm-mingw, come nell'ordine di un'unità.
+  // Il PATH dell'editor: su Windows make e gcc di MSYS, poi clang e lldb-dap di llvm-mingw, in quest'ordine.
   if (process.platform === "win32") {
     const msys = opzioni.msys ?? join(process.env.SystemDrive ?? "C:", "\\", "msys64", "usr", "bin");
     for (const p of ["make.exe", "gcc.exe"]) if (!existsSync(join(msys, p))) fermo(`in ${msys} manca ${p}`);
@@ -246,6 +257,7 @@ async function nellEditor(eseguibile: string): Promise<void> {
   const casi = realpathSync(join(cartella, "casi  con  spazi"));
   cpSync(join(RADICE, "prove", "casi", "ciao"), join(casi, "ciao"), { recursive: true });
   cpSync(join(RADICE, "prove", "casi", "leggi"), join(casi, "leggi"), { recursive: true });
+  cpSync(join(RADICE, "prove", "casi", "avvisi"), join(casi, "avvisi"), { recursive: true });
   mkdirSync(join(casi, "errore"));
   const righe = readFileSync(join(RADICE, "prove", "casi", "leggi", "leggi.c"), "utf8").split("\n");
   if (!righe[4]?.endsWith(");")) fermo(`la riga 5 di leggi.c non è quella attesa: ${righe[4]}`);
@@ -270,16 +282,20 @@ async function nellEditor(eseguibile: string): Promise<void> {
   const e = JSON.parse(readFileSync(uscita, "utf8")) as {
     comandiNelTitolo?: string[];
     terminalePrima?: string;
-    ciao?: { testo: string };
+    ciao?: { testo: string; icona?: string | null };
+    barraConUnFile?: { voci: string[] };
     leggi?: { domandaVista: boolean; terminaleAttivo?: string; titoloAttivo?: string; testo?: string };
     errore?: { testo: string; problemi: { riga: number; gravita: number; fonte?: string; messaggio: string }[]; cursore: number | null; programmaNato: boolean };
-    passo?: Fermo & { terminale: string | null; fermoPrima: boolean; finito?: boolean; testo?: string };
+    passo?: Fermo & { terminale: string | null; fermoPrima: boolean; finito?: boolean; testo?: string; barra?: { voci: string[] } };
     inizio?: Fermo;
     riuso?: Fermo & { controllo: boolean; sporco: boolean; nuovoTerminale: boolean };
+    avvisi?: { testo: string };
+    senzaNome?: { schema?: string; barra?: { voci: string[] } };
   };
   console.log(JSON.stringify(e, null, 2).slice(0, 6000));
   const ciao = e.ciao?.testo ?? "";
-  prova("i due comandi sono registrati nell'editor", (e.comandiNelTitolo ?? []).join() === "c-run.compilaEdEsegui,c-run.passoPasso", String(e.comandiNelTitolo));
+  // I due della barra, più quello che dice lo stato della barra alle prove (fuori dal manifesto: non è nella tavolozza).
+  prova("i comandi registrati nell'editor: i due della barra e quello dello stato della barra", (e.comandiNelTitolo ?? []).join() === "c-run.compilaEdEsegui,c-run.passoPasso,c-run.statoDellaBarra", String(e.comandiNelTitolo));
   // Il lettore del terminale distingue: vuoto prima del comando, col saluto dopo.
   prova("controllo: prima del comando il terminale «Programma C» non c'è, dopo sì", e.terminalePrima === "" && ciao.includes("Ciao, mondo!"), JSON.stringify(e.terminalePrima));
   prova("col Makefile: la riga della compilazione, il programma, la fine", ciao.includes("Compilo main.c col Makefile…") && ciao.includes("Ciao, mondo!") && ciao.includes("(finito: uscita 0)"), ciao);
@@ -298,12 +314,26 @@ async function nellEditor(eseguibile: string): Promise<void> {
   prova("passo passo senza punti d'arresto: si ferma sulla riga 5, la prima di main", e.inizio?.fermo === true && e.inizio?.riga === 5, JSON.stringify(e.inizio));
   prova("il file da solo: la riga prima del programma dice di scrivere lì ciò che legge", leggi.includes("(se legge qualcosa, scrivilo qui e premi Invio):"), leggi);
   prova("la fine dice come eseguirlo di nuovo", ciao.includes("Il programma è finito. Per eseguirlo di nuovo: ▶ Compila ed esegui, nella barra in basso."), ciao);
+  // La barra: con un file .c due voci col nome del file e un solo triangolo; durante il passo passo nessuna; su un documento
+  // senza nome nessuna. Il terminale «Programma C» senza l'icona del triangolo.
+  const vociConUnFile = e.barraConUnFile?.voci ?? [];
+  prova("la barra con un file .c: «Compila ed esegui» e «Passo passo» col nome del file, un solo triangolo", vociConUnFile.length === 2 && vociConUnFile.every((v) => v.endsWith(" main.c")) && vociConUnFile.join(" ").match(TRIANGOLI)?.length === 1, JSON.stringify(e.barraConUnFile));
+  prova("la barra durante il passo passo: le due voci non ci sono", e.passo?.barra !== undefined && e.passo.barra.voci.length === 0, JSON.stringify(e.passo?.barra));
+  prova("la barra su un documento C senza nome: le due voci non ci sono", e.senzaNome?.schema === "untitled" && e.senzaNome.barra?.voci.length === 0, JSON.stringify(e.senzaNome));
+  prova("il terminale «Programma C» ha l'icona del terminale, non un triangolo", e.ciao?.icona === "terminal", String(e.ciao?.icona));
+  const avvisi = e.avvisi?.testo ?? "";
+  prova("trenta avvisi del compilatore: il terminale li mostra e il programma parte", (avvisi.match(/warning:/g) ?? []).length === 30 && avvisi.includes("Partito nonostante gli avvisi") && avvisi.includes("(finito: uscita 0)"), avvisi.slice(-1500));
+  // La premessa della prova del riuso: l'editor ha riusato il terminale del passo passo. Se ne ha aperto uno nuovo, la prova
+  // non dice nulla del riuso: non si conta, e l'esito è FERMO.
+  if (e.riuso?.nuovoTerminale !== false) premesseMancanti.push(`passo passo di nuovo: l'editor non ha riusato il terminale del debugger (${JSON.stringify(e.riuso)})`);
   // Il controllo della digitazione deve sporcare il file col fuoco nel file, se no la prova dopo non discrimina.
   const cursoreNelTerminale = e.riuso?.controllo === true && e.riuso?.sporco === false;
   if (process.platform === "darwin") {
     // Limite dichiarato nel README: su macOS, dal secondo passo passo, il cursore resta nel file (misurato in due corse delle
-    // Actions, anche rimettendo il terminale davanti dopo il lancio e dopo l'aggancio). Qui si scrive l'esito, senza contarlo.
-    console.log(`NOTA  limite dichiarato su macOS, passo passo di nuovo: ${cursoreNelTerminale ? "il cursore è andato nel terminale" : "il cursore è rimasto nel file"} ${JSON.stringify(e.riuso)}`);
+    // Actions, anche rimettendo il terminale davanti dopo il lancio e dopo l'aggancio). Qui l'esito si scrive nel rapporto,
+    // senza contarlo.
+    limiti.push(`macOS, passo passo di nuovo: ${cursoreNelTerminale ? "il cursore è andato nel terminale" : "il cursore è rimasto nel file"} (controllo ${e.riuso?.controllo}, file toccato ${e.riuso?.sporco})`);
+    console.log(`NOTA  limite dichiarato: ${limiti.at(-1)}`);
   } else {
     prova("passo passo di nuovo: il cursore va nel terminale del programma (la digitazione non tocca il file; col fuoco nel file sì)", cursoreNelTerminale, JSON.stringify(e.riuso));
   }
@@ -315,13 +345,14 @@ if (opzioni.editor !== undefined) await nellEditor(opzioni.editor);
 // Su macOS la prova del cursore nel terminale riusato si scrive senza contarla (limite dichiarato nel README).
 const provePreviste = PROVE_SENZA_EDITOR - (opzioni.pacchetto !== undefined ? 1 : 0) + (opzioni.editor !== undefined ? PROVE_DELL_EDITOR - (process.platform === "darwin" ? 1 : 0) : 0);
 console.log(`prove: ${fatte}/${provePreviste}, fallite ${fallite.length}${opzioni.editor !== undefined ? "" : "; l'editor non è stato aperto"}`);
-const esito = fatte !== provePreviste ? "FERMO" : fallite.length > 0 ? "ROSSO" : "VERDE";
+const esito = fatte !== provePreviste || premesseMancanti.length > 0 ? "FERMO" : fallite.length > 0 ? "ROSSO" : "VERDE";
 if (opzioni.rapporto !== undefined) {
   mkdirSync(dirname(opzioni.rapporto), { recursive: true });
-  writeFileSync(opzioni.rapporto, `${JSON.stringify({ sistema: process.platform, architettura: process.arch, editor: opzioni.editor ?? null, pacchetto: { nome: VSIX.split(/[\\/]/).pop(), byte: pacchetto.length, sha256: impronta(pacchetto) }, fatte, previste: provePreviste, fallite, esito }, null, 2)}\n`);
+  writeFileSync(opzioni.rapporto, `${JSON.stringify({ sistema: process.platform, architettura: process.arch, editor: opzioni.editor ?? null, pacchetto: { nome: VSIX.split(/[\\/]/).pop(), byte: pacchetto.length, sha256: impronta(pacchetto) }, fatte, previste: provePreviste, fallite, premesseMancanti, limiti, esito }, null, 2)}\n`);
 }
 if (esito === "FERMO") {
-  console.log(`FERMO: il denominatore non torna: dichiarate ${provePreviste}, eseguite ${fatte}`);
+  if (fatte !== provePreviste) console.log(`FERMO: il denominatore non torna: dichiarate ${provePreviste}, eseguite ${fatte}`);
+  for (const p of premesseMancanti) console.log(`FERMO: manca la premessa: ${p}`);
   process.exit(2);
 }
 console.log(`ESITO: ${esito === "ROSSO" ? "ROSSO" : opzioni.editor !== undefined ? "VERDE" : "VERDE, senza l'editor: l'estensione nell'editor non è stata provata"}`);

@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { nomeDelProgramma, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi } from "../src/piano";
+import { comandoDelTerminale, LIMITE_DELLA_RIGA_DI_CMD, MANCA_IL_COMPILATORE, MANCA_MAKE, mancaLEstensioneDelDebug, nomeDelProgramma, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi } from "../src/piano";
 
 const uscita = (nome: string) => readFileSync(join(import.meta.dir, "casi", "uscite", nome), "utf8");
 const CARTELLA = join("prova", "dove");
@@ -77,7 +77,33 @@ test("la riga del rifiuto: uno, più d'uno, in un altro file, nessuna riga", () 
 });
 
 test("il passo passo impossibile col compilatore del debugger: la frase nomina il compilatore e il rimedio", () => {
-  expect(rigaDelPassoPassoImpossibile("clang")).toBe("Questo programma si compila e si esegue con «Compila ed esegui», ma non con clang, che serve al passo passo: usa funzioni che clang qui non ha. Gli errori di clang sono in «Problemi».");
+  expect(rigaDelPassoPassoImpossibile("clang")).toBe("Questo programma si compila e si esegue con «Compila ed esegui», ma non con clang, che serve al passo passo: usa funzioni che clang qui non ha. Gli errori di clang sono in «Problemi». Per seguirlo passo passo usa un debug con gcc (F5), se l'editor ne ha uno.");
+});
+
+test("le frasi di quando manca uno strumento dicono che cosa fare", () => {
+  expect(MANCA_MAKE).toContain("il programma non parte. Installa make");
+  expect(MANCA_IL_COMPILATORE).toContain("«c-run.compilatore»");
+  expect(mancaLEstensioneDelDebug("x.y")).toBe("Per andare passo passo serve l'estensione «LLDB DAP» (x.y): installala dal pannello Estensioni.");
+});
+
+test("il comando del terminale con trenta diagnostiche: le righe restano nel file, la riga di cmd sotto il limite", () => {
+  // Trenta avvisi veri di clang 23 su prove/casi/avvisi/avvisi.c (il caso della prova con l'editor), in una cartella dal
+  // percorso lungo con spazi doppi.
+  const cartella = join("C:", "una  cartella  dal  nome  lungo".repeat(4), "esercizi  di  oggi");
+  const uscitaLunga = uscita("clang-trenta-avvisi.txt");
+  const p = pianoDiCompilazione({ file: join(cartella, "avvisi.c"), haMakefile: false, sistema: "win32", compilatore: "clang", perPassoPasso: false });
+  const righe = righeDellaCompilazione(p, uscitaLunga);
+  expect(segnalazioniDi(uscitaLunga, cartella).length).toBe(30);
+  // Il controllo: le stesse righe sulla riga di comando (com'era prima, in base64) supererebbero il limite.
+  expect(Buffer.from(JSON.stringify(righe)).toString("base64").length).toBeGreaterThan(LIMITE_DELLA_RIGA_DI_CMD);
+  const motore = join("C:", "una  cartella  dal  nome  lungo".repeat(4), "vscodium", "VSCodium.exe");
+  const c = comandoDelTerminale({ sistema: "win32", comSpec: "C:\\Windows\\system32\\cmd.exe", motore, scrittore: join(motore, "..", "dist", "terminale.cjs"), fileDelleRighe: join("C:", "Temp", "c-run-righe-1-1.json"), programma: join(cartella, "avvisi.exe") });
+  const riga = `${c.shellPath} ${String(c.shellArgs)}`;
+  expect(riga.length).toBeLessThan(LIMITE_DELLA_RIGA_DI_CMD);
+  expect(riga).not.toContain("unused variable");
+  expect(riga).toContain("!errorlevel!");
+  const senza = comandoDelTerminale({ sistema: "linux", motore: "/m", scrittore: "/s.cjs", fileDelleRighe: "/tmp/r.json" });
+  expect(senza.shellArgs).toEqual(["-c", 'ELECTRON_RUN_AS_NODE=1 exec "$0" "$1" solo "$2"', "/m", "/s.cjs", "/tmp/r.json"]);
 });
 
 test("il programma del Makefile: l'unico eseguibile nuovo", () => {
@@ -89,8 +115,8 @@ test("il programma del Makefile: l'unico eseguibile nuovo", () => {
   ];
   expect(programmaNato(voci, 100, "win32")).toEqual({ programma: "ciao.exe" });
   expect(programmaNato([{ nome: "ciao", modificato: 120, eseguibile: true }, { nome: "main.o", modificato: 120, eseguibile: false }], 100, "linux")).toEqual({ programma: "ciao" });
-  expect(programmaNato([{ nome: "ciao", modificato: 120, eseguibile: true }], 100, "win32").motivo).toBe("Il Makefile non ha prodotto un programma da eseguire.");
-  expect(programmaNato([...voci, { nome: "altro.exe", modificato: 130, eseguibile: true }], 100, "win32").motivo).toBe("Il Makefile ha prodotto più programmi (altro.exe, ciao.exe): non so quale eseguire.");
+  expect(programmaNato([{ nome: "ciao", modificato: 120, eseguibile: true }], 100, "win32").motivo).toBe("Il Makefile non ha prodotto un programma da eseguire: controlla che la sua prima regola costruisca l'eseguibile.");
+  expect(programmaNato([...voci, { nome: "altro.exe", modificato: 130, eseguibile: true }], 100, "win32").motivo).toBe("Il Makefile ha prodotto più programmi (altro.exe, ciao.exe): non so quale eseguire. Fai in modo che ne produca uno solo, o eseguilo dal terminale.");
 });
 
 test("le righe del terminale: la descrizione, il comando in grigio, l'uscita del compilatore senza righe vuote", () => {

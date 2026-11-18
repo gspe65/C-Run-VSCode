@@ -18,6 +18,11 @@ export function scegliCompilatore(scritto: string, esiste: (nome: string) => boo
   return ["clang", "gcc", "cc"].find(esiste);
 }
 
+/** Le frasi di quando manca uno strumento: che cosa manca e che cosa fare. */
+export const MANCA_MAKE = "Questo programma ha un Makefile, ma il comando make non c'è (non è nel PATH dell'editor): il programma non parte. Installa make, oppure, se usi un ambiente portabile, apri l'editor dal suo collegamento, che aggiunge gli strumenti al PATH.";
+export const MANCA_IL_COMPILATORE = "Non trovo un compilatore C (clang, gcc o cc) nel PATH dell'editor: il programma non parte. Installane uno, o scrivi quale usare nell'impostazione «c-run.compilatore»; se usi un ambiente portabile, apri l'editor dal suo collegamento.";
+export const mancaLEstensioneDelDebug = (id: string) => `Per andare passo passo serve l'estensione «LLDB DAP» (${id}): installala dal pannello Estensioni.`;
+
 export type Piano = { come: "makefile" | "file"; cartella: string; comando: string[]; descrizione: string; programma?: string };
 
 /** Come si compila il file: col Makefile della sua cartella, se c'è, o il file da solo. Per il passo passo il Makefile
@@ -66,7 +71,7 @@ export function rigaDelRifiuto(segnalazioni: Segnalazione[], fileAperto: string)
 /** La riga del passo passo quando il programma si compila col suo compilatore ma non con quello del debugger (su Windows: un
  *  programma che usa fork o altre funzioni che ci sono solo con il gcc di MSYS2 o Cygwin, e clang no). */
 export function rigaDelPassoPassoImpossibile(compilatore: string): string {
-  return `Questo programma si compila e si esegue con «Compila ed esegui», ma non con ${compilatore}, che serve al passo passo: usa funzioni che ${compilatore} qui non ha. Gli errori di ${compilatore} sono in «Problemi».`;
+  return `Questo programma si compila e si esegue con «Compila ed esegui», ma non con ${compilatore}, che serve al passo passo: usa funzioni che ${compilatore} qui non ha. Gli errori di ${compilatore} sono in «Problemi». Per seguirlo passo passo usa un debug con gcc (F5), se l'editor ne ha uno.`;
 }
 
 export type Voce = { nome: string; modificato: number; eseguibile: boolean };
@@ -76,8 +81,36 @@ export type Voce = { nome: string; modificato: number; eseguibile: boolean };
 export function programmaNato(voci: Voce[], inizio: number, sistema: string): { programma?: string; motivo?: string } {
   const nuovi = voci.filter((v) => v.modificato >= inizio && (sistema === "win32" ? v.nome.toLowerCase().endsWith(".exe") : v.eseguibile)).map((v) => v.nome).sort();
   if (nuovi.length === 1) return { programma: nuovi[0] };
-  if (nuovi.length === 0) return { motivo: "Il Makefile non ha prodotto un programma da eseguire." };
-  return { motivo: `Il Makefile ha prodotto più programmi (${nuovi.join(", ")}): non so quale eseguire.` };
+  if (nuovi.length === 0) return { motivo: "Il Makefile non ha prodotto un programma da eseguire: controlla che la sua prima regola costruisca l'eseguibile." };
+  return { motivo: `Il Makefile ha prodotto più programmi (${nuovi.join(", ")}): non so quale eseguire. Fai in modo che ne produca uno solo, o eseguilo dal terminale.` };
+}
+
+/** Il limite della riga di comando di cmd su Windows (misurato con CreateProcess: 8.147 caratteri passano, 8.347 danno «La
+ *  riga di comando è troppo lunga.» e non esegue nulla). */
+export const LIMITE_DELLA_RIGA_DI_CMD = 8191;
+
+/** Come si avvia il terminale «Programma C». Le righe da scrivere stanno in un file (`fileDelleRighe`), non sulla riga di
+ *  comando: l'uscita del compilatore non ha un tetto, la riga di comando di cmd sì, e oltre il tetto il programma non partirebbe.
+ *  Sulla riga restano solo i percorsi. Su Windows il codice d'uscita si legge con !errorlevel! (/v:on): %errorlevel% varrebbe
+ *  quello di prima del programma. ELECTRON_RUN_AS_NODE la imposta la shell subito prima: l'editor la toglie dall'ambiente dei
+ *  suoi terminali. */
+export function comandoDelTerminale(a: { sistema: string; comSpec?: string; motore: string; scrittore: string; fileDelleRighe: string; programma?: string }): { shellPath: string; shellArgs: string | string[] } {
+  if (a.sistema === "win32") {
+    return {
+      shellPath: a.comSpec ?? "cmd.exe",
+      shellArgs:
+        a.programma === undefined
+          ? `/d /s /c "set ELECTRON_RUN_AS_NODE=1&& "${a.motore}" "${a.scrittore}" solo "${a.fileDelleRighe}""`
+          : `/d /v:on /s /c "set ELECTRON_RUN_AS_NODE=1&& "${a.motore}" "${a.scrittore}" testa "${a.fileDelleRighe}" & "${a.programma}" & "${a.motore}" "${a.scrittore}" coda !errorlevel!"`,
+    };
+  }
+  return {
+    shellPath: "/bin/sh",
+    shellArgs:
+      a.programma === undefined
+        ? ["-c", 'ELECTRON_RUN_AS_NODE=1 exec "$0" "$1" solo "$2"', a.motore, a.scrittore, a.fileDelleRighe]
+        : ["-c", 'ELECTRON_RUN_AS_NODE=1 "$0" "$1" testa "$2"; "$3"; c=$?; ELECTRON_RUN_AS_NODE=1 exec "$0" "$1" coda "$c"', a.motore, a.scrittore, a.fileDelleRighe, a.programma],
+  };
 }
 
 /** Le righe del terminale prima del programma: che cosa si fa, il comando vero in grigio, ciò che il compilatore ha scritto. */
