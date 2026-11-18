@@ -2,7 +2,7 @@
 
 Un'estensione per VSCodium e Visual Studio Code che compila ed esegue con un clic il programma C del file aperto, o lo segue passo passo.
 
-> **Versione di prova (0.0.5).** Il pacchetto è costruito e provato dalle GitHub Actions di questo repository; la prima versione per l'uso è in preparazione.
+> **Versione di prova (0.0.6).** Il pacchetto è costruito e provato dalle GitHub Actions di questo repository; la prima versione per l'uso è in preparazione.
 
 ## Che cosa fa
 
