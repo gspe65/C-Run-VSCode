@@ -17,6 +17,9 @@ const resta = () => setInterval(() => {}, 1 << 30);
 if (modo === "coda") {
   scrivi("");
   scrivi(`(finito: uscita ${dato ?? "?"})`, true);
+  scrivi("Il programma è finito. Per eseguirlo di nuovo: ▶ Compila ed esegui, nella barra in basso.");
+  // Il cursore si nasconde: in questo terminale non si scrive più nulla (un cursore acceso promette una riga di comando che non c'è).
+  process.stdout.write("\x1b[?25l");
   resta();
 } else {
   // Il titolo della scheda: senza, l'editor mostra il nome del processo, non «Programma C».

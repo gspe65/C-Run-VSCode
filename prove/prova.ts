@@ -31,7 +31,7 @@ const { values: opzioni } = parseArgs({
 
 /** I denominatori, dichiarati prima della corsa: le chiamate a `prova` senza editor, e quelle in più con l'editor. */
 const PROVE_SENZA_EDITOR = 16;
-const PROVE_DELL_EDITOR = 14;
+const PROVE_DELL_EDITOR = 18;
 const TEST_ATTESI = 13;
 
 /** Ciò che il pacchetto contiene, e nient'altro. */
@@ -99,9 +99,10 @@ prova("la logica, senza editor", test.uscita === 0 && numero("tests") === TEST_A
 const colpiIn = (testo: string): string[] => [PERCORSO_ASSOLUTO, ...VIETATE].flatMap((rx) => rx.exec(testo)?.[0] ?? []);
 const importDi = (testo: string): string[] => [...new Set(new Bun.Transpiler({ loader: "js" }).scanImports(testo).map((i) => i.path))].sort();
 type Manifesto = { license?: string; contributes?: { commands?: { command: string; icon?: string }[]; menus?: Record<string, { command: string; when?: string }[]> } };
-/** I due comandi, con l'icona, nel titolo di un file C. */
-const comandiNelTitolo = (m: Manifesto): boolean =>
-  ["c-run.compilaEdEsegui", "c-run.passoPasso"].every((c) => m.contributes?.commands?.some((x) => x.command === c && x.icon !== undefined) && m.contributes?.menus?.["editor/title"]?.some((x) => x.command === c && x.when === "resourceLangId == c"));
+/** I due comandi ci sono, e nessuno dei due ha un'icona nel titolo dell'editor: chi impara a programmare vede un solo
+ *  triangolo di esecuzione, quello scritto nella barra di stato. */
+const comandiSenzaTitolo = (m: Manifesto): boolean =>
+  ["c-run.compilaEdEsegui", "c-run.passoPasso"].every((c) => m.contributes?.commands?.some((x) => x.command === c)) && !(m.contributes?.menus?.["editor/title"] ?? []).some((x) => x.command.startsWith("c-run."));
 
 function motiviDelleVoci(voci: ReadonlyMap<string, Uint8Array>): string[] {
   const motivi: string[] = [];
@@ -119,7 +120,7 @@ function motiviDelleVoci(voci: ReadonlyMap<string, Uint8Array>): string[] {
   const manifesto = voci.get("extension/package.json");
   if (manifesto !== undefined) {
     const m = JSON.parse(new TextDecoder().decode(manifesto)) as Manifesto;
-    if (!comandiNelTitolo(m)) motivi.push("extension/package.json: i due comandi non hanno l'icona nel titolo dei file C");
+    if (!comandiSenzaTitolo(m)) motivi.push("extension/package.json: i due comandi mancano, o hanno un'icona nel titolo dell'editor");
     if (m.license !== "MIT") motivi.push(`extension/package.json: licenza ${m.license}`);
   }
   const vsixManifest = voci.get("extension.vsixmanifest");
@@ -146,7 +147,7 @@ const voci = (() => {
   }
 })();
 console.log(`voci: ${voci.size}, attese ${NEL_PACCHETTO.length}; motivi ${motiviVeri.length}`);
-prova("il pacchetto: le voci attese nei due versi, i file del repository, gli import, i comandi nel titolo, la licenza, nessun percorso assoluto né stringa vietata", motiviVeri.length === 0, motiviVeri.join("; "));
+prova("il pacchetto: le voci attese nei due versi, i file del repository, gli import, i comandi senza icone nel titolo, la licenza, nessun percorso assoluto né stringa vietata", motiviVeri.length === 0, motiviVeri.join("; "));
 
 // Il lettore dello zip contro un lettore del sistema, sullo stesso file. Su Windows il `tar` di System32; altrove `unzip`.
 const estratto = join(cartella, "estratto  dal pacchetto");
@@ -200,8 +201,8 @@ prova("controllo: le voci vere, copiate senza mutazioni, sono verdi", motiviDell
 const troncato = pacchetto.subarray(0, pacchetto.length - 30);
 mutazione("un pacchetto troncato", pacchetto.length - troncato.length, motiviDelFile(troncato), ["il pacchetto non si legge: manca la fine dell'indice"]);
 const manifestoVero = JSON.parse(readFileSync(join(estratto, "extension", "package.json"), "utf8")) as Manifesto;
-prova("mutazione: senza il menu del titolo i comandi non bastano", comandiNelTitolo(manifestoVero) && !comandiNelTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, menus: {} } }));
-prova("mutazione: un comando senza icona non basta", !comandiNelTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, commands: (manifestoVero.contributes?.commands ?? []).map((c) => ({ command: c.command })) } }));
+prova("mutazione: un comando con l'icona nel titolo dell'editor è rosso", comandiSenzaTitolo(manifestoVero) && !comandiSenzaTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, menus: { ...manifestoVero.contributes?.menus, "editor/title": [{ command: "c-run.compilaEdEsegui", when: "resourceLangId == c" }] } } }));
+prova("mutazione: un comando che manca è rosso", !comandiSenzaTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, commands: (manifestoVero.contributes?.commands ?? []).filter((c) => c.command !== "c-run.passoPasso") } }));
 prova("mutazione: il lettore del sistema con una voce in più non torna", differenze(voci.keys(), [...contenuto, "extension/x"]).soloB.join() === "extension/x");
 
 // --- Nell'editor dato.
@@ -274,6 +275,7 @@ async function nellEditor(eseguibile: string): Promise<void> {
     errore?: { testo: string; problemi: { riga: number; gravita: number; fonte?: string; messaggio: string }[]; cursore: number | null; programmaNato: boolean };
     passo?: Fermo & { terminale: string | null; fermoPrima: boolean; finito?: boolean; testo?: string };
     inizio?: Fermo;
+    riuso?: Fermo & { controllo: boolean; sporco: boolean; nuovoTerminale: boolean };
   };
   console.log(JSON.stringify(e, null, 2).slice(0, 6000));
   const ciao = e.ciao?.testo ?? "";
@@ -294,6 +296,11 @@ async function nellEditor(eseguibile: string): Promise<void> {
   prova("passo passo: con l'ingresso 21 si ferma sulla riga 8 con n = 21", e.passo?.fermo === true && e.passo?.riga === 8 && e.passo?.n === "21", JSON.stringify(e.passo));
   prova("passo passo: continuando scrive 42 e la sessione finisce", e.passo?.finito === true && /42/.test(e.passo?.testo ?? ""), JSON.stringify(e.passo));
   prova("passo passo senza punti d'arresto: si ferma sulla riga 5, la prima di main", e.inizio?.fermo === true && e.inizio?.riga === 5, JSON.stringify(e.inizio));
+  prova("il file da solo: la riga prima del programma dice di scrivere lì ciò che legge", leggi.includes("(se legge qualcosa, scrivilo qui e premi Invio):"), leggi);
+  prova("la fine dice come eseguirlo di nuovo", ciao.includes("Il programma è finito. Per eseguirlo di nuovo: ▶ Compila ed esegui, nella barra in basso."), ciao);
+  // Il controllo della digitazione deve sporcare il file col fuoco nel file, se no la prova dopo non discrimina.
+  prova("passo passo di nuovo: il cursore va nel terminale del programma (la digitazione non tocca il file; col fuoco nel file sì)", e.riuso?.controllo === true && e.riuso?.sporco === false, JSON.stringify(e.riuso));
+  prova("passo passo di nuovo: con l'ingresso 21 si ferma sulla riga 8 con n = 21", e.riuso?.fermo === true && e.riuso?.riga === 8 && e.riuso?.n === "21", JSON.stringify(e.riuso));
 }
 
 if (opzioni.editor !== undefined) await nellEditor(opzioni.editor);
