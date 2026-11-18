@@ -2,7 +2,7 @@
 
 Un'estensione per VSCodium e Visual Studio Code che compila ed esegue con un clic il programma C del file aperto, o lo segue passo passo.
 
-> **Versione di prova (0.0.2).** Il pacchetto è costruito e provato dalle GitHub Actions di questo repository; la prima versione per l'uso è in preparazione.
+> **Versione di prova (0.0.3).** Il pacchetto è costruito e provato dalle GitHub Actions di questo repository; la prima versione per l'uso è in preparazione.
 
 ## Che cosa fa
 
@@ -25,10 +25,10 @@ Il compilatore per il file da solo e per il passo passo si sceglie nell'impostaz
 
 ## Installarla
 
-Dalla [pagina delle release](https://github.com/gspe65/C-Run-VSCode/releases) si scarica `C-Run-0.0.2.vsix`, poi nell'editor: «Estensioni», menu «···», «Installa da VSIX…». Da riga di comando:
+Dalla [pagina delle release](https://github.com/gspe65/C-Run-VSCode/releases) si scarica `C-Run-0.0.3.vsix`, poi nell'editor: «Estensioni», menu «···», «Installa da VSIX…». Da riga di comando:
 
 ```
-codium --install-extension C-Run-0.0.2.vsix
+codium --install-extension C-Run-0.0.3.vsix
 ```
 
 (`code` al posto di `codium` per Visual Studio Code.)
@@ -38,7 +38,7 @@ codium --install-extension C-Run-0.0.2.vsix
 Il pacchetto lo costruisce la corsa delle GitHub Actions di questo repository, a ogni etichetta, **una volta sola**. Lo stesso file viene provato con VSCodium 1.143.17232 su Windows (clang e lldb di llvm-mingw, make e gcc di MSYS2), Ubuntu (con uno schermo virtuale, i compilatori del sistema e lldb 21 di LLVM) e macOS (gli strumenti di Xcode), facendo ciò che fa chi lo usa: un progetto col `Makefile`, un file da solo che legge un numero, un errore messo apposta, il passo passo (due volte, la seconda nel terminale che l'editor riusa). La release si crea solo se le tre prove sono verdi, e il file porta un'attestazione della sua provenienza, che si verifica con:
 
 ```
-gh attestation verify C-Run-0.0.2.vsix -R gspe65/C-Run-VSCode
+gh attestation verify C-Run-0.0.3.vsix -R gspe65/C-Run-VSCode
 ```
 
 ## Costruirla e provarla dai sorgenti
