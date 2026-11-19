@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { differenze, esegui, fermo, impronta, RADICE, vociDelloZip } from "../strumenti/comune";
+import { PREVISTE } from "./conteggio";
 
 const { values: opzioni } = parseArgs({
   args: Bun.argv.slice(2),
@@ -30,11 +31,27 @@ const { values: opzioni } = parseArgs({
 });
 
 /** I denominatori, dichiarati prima della corsa: le chiamate a `prova` senza editor, e quelle in più con l'editor. */
-const PROVE_SENZA_EDITOR = 17;
-const PROVE_DELL_EDITOR = 23;
-const TEST_ATTESI = 15;
-/** Le icone col triangolo di esecuzione: nella barra ce ne dev'essere una sola. */
-const TRIANGOLI = /\$\((play|run|debug-start|debug-continue|triangle-right)\)/g;
+const PROVE_SENZA_EDITOR = 23;
+const PROVE_DELL_EDITOR = 25;
+const TEST_ATTESI = 18;
+/** Le icone col triangolo di esecuzione, per famiglie di codicon: la riproduzione (`play`, `play-circle`), l'esecuzione (`run`,
+ *  `run-all`, `run-above`…), l'avvio, la continuazione e il riavvio del debug, il triangolo col bug (`debug-alt`), l'esecuzione
+ *  dei notebook e delle prove, i triangoli a destra e a sinistra; anche con un modificatore (`~spin`). Un'icona nuova di una
+ *  famiglia si conta da sola. Nella barra ce ne dev'essere una sola, e nessuna sulle schede dei terminali. */
+const TRIANGOLI = /\$\((?:play|run|debug-(?:start|continue|alt|rerun|reverse-continue)|notebook-execute|testing-run|triangle-(?:right|left))(?:-[\w-]+)?(?:~[\w-]+)?\)/g;
+const triangoliIn = (testo: string): number => testo.match(TRIANGOLI)?.length ?? 0;
+/** Parole del lavoro su questo repository che nel pacchetto non devono esserci (il README ci va così com'è). Si compongono qui
+ *  a pezzi: scritte per intero, questo file (pubblico) le conterrebbe. Coi plurali, con «con» e «col» dopo spazi qualsiasi,
+ *  con l'accento o con l'apostrofo; le ultime come parole intere: una parola più lunga che le contiene no. */
+const parola = (...pezzi: string[]): string => pezzi.join("");
+const LESSICO = [
+  new RegExp(`${parola("ril", "iev")}[oi]`, "gi"),
+  new RegExp(`${parola("valut", "at")}(?:ore|ori|rice|rici)`, "gi"),
+  new RegExp(`${parola("gir", "")}[oi]\\s+co[nli](?![\\p{L}])`, "giu"),
+  new RegExp(`(?<![\\p{L}\\p{N}_])(?:${parola("My", "\\s*", "Dev")}|${parola("unit", "(?:à|a')")})(?![\\p{L}\\p{N}_])`, "giu"),
+];
+/** Le parole del lessico in una voce, ognuna col suo motivo. */
+const lessicoIn = (voce: string, testo: string): string[] => LESSICO.flatMap((rx) => [...testo.matchAll(rx)].map((m) => `${voce}: la parola «${m[0]}»`));
 
 /** Ciò che il pacchetto contiene, e nient'altro. */
 const NEL_PACCHETTO = ["[Content_Types].xml", "extension.vsixmanifest", "extension/LICENSE.txt", "extension/dist/extension.cjs", "extension/dist/terminale.cjs", "extension/package.json", "extension/readme.md"];
@@ -132,6 +149,7 @@ function motiviDelleVoci(voci: ReadonlyMap<string, Uint8Array>): string[] {
   const vsixManifest = voci.get("extension.vsixmanifest");
   if (vsixManifest !== undefined && !new TextDecoder().decode(vsixManifest).includes("<License>extension/LICENSE.txt</License>")) motivi.push("extension.vsixmanifest: non indica la licenza");
   for (const [v, d] of voci) for (const c of colpiIn(new TextDecoder().decode(d))) motivi.push(`${v}: ${c}`);
+  for (const [v, d] of voci) motivi.push(...lessicoIn(v, new TextDecoder().decode(d)));
   return motivi;
 }
 function motiviDelFile(dati: Uint8Array): string[] {
@@ -152,8 +170,8 @@ const voci = (() => {
     return new Map<string, Uint8Array>();
   }
 })();
-console.log(`voci: ${voci.size}, attese ${NEL_PACCHETTO.length}; motivi ${motiviVeri.length}`);
-prova("il pacchetto: le voci attese nei due versi, i file del repository, gli import, i comandi senza icone nel titolo, la licenza, nessun percorso assoluto né stringa vietata", motiviVeri.length === 0, motiviVeri.join("; "));
+console.log(`voci: ${voci.size}, attese ${NEL_PACCHETTO.length}; motivi ${motiviVeri.length}; lessico: ${LESSICO.length} famiglie di parole cercate in ${voci.size} voci`);
+prova("il pacchetto: le voci attese nei due versi, i file del repository, gli import, i comandi senza icone nel titolo, la licenza, nessun percorso assoluto, stringa vietata né parola del lessico", motiviVeri.length === 0, motiviVeri.join("; "));
 
 // Il lettore dello zip contro un lettore del sistema, sullo stesso file. Su Windows il `tar` di System32; altrove `unzip`.
 const estratto = join(cartella, "estratto  dal pacchetto");
@@ -204,17 +222,56 @@ prova("controllo: le voci vere, copiate senza mutazioni, sono verdi", motiviDell
   const m = mutata((v) => (v.set(EXTRA, testo(`module.exports = ["${assoluto("C", "\\\\")}a", "bun:sqlite"];`)), 1));
   mutazione("una voce in più con un percorso assoluto e una stringa vietata", m.toccate, motiviDelleVoci(m.voci), [`voce in più: ${EXTRA}`, `${EXTRA}: ${assoluto("C", "\\")}`, `${EXTRA}: bun:`]);
 }
+{
+  // Le parole del lessico in una voce che non si confronta col repository: ciascuna col suo motivo, coi plurali, le maiuscole,
+  // più spazi, l'apostrofo; una parola più lunga che ne contiene una no.
+  const VOCE = "extension/dist/terminale.cjs";
+  const [p1, p2, p3, p4, p5, p6, p7] = [parola("ril", "ievi"), parola("Valut", "atore"), parola("giro", "  col"), parola("My", "Dev"), parola("unit", "a'"), parola("Unit", "à"), parola("comun", "ità")];
+  const m = mutata((v) => (v.set(VOCE, Buffer.concat([v.get(VOCE) ?? new Uint8Array(), Buffer.from(`\n/* i ${p1} del ${p2}, un ${p3} ${p4}, l'${p5} e l'${p6} della ${p7} */`)])), 1));
+  mutazione("le parole del lessico in un programma del pacchetto", m.toccate, motiviDelleVoci(m.voci), [p1, p2, p3, p4, p5, p6].map((p) => `${VOCE}: la parola «${p}»`));
+}
 const troncato = pacchetto.subarray(0, pacchetto.length - 30);
 mutazione("un pacchetto troncato", pacchetto.length - troncato.length, motiviDelFile(troncato), ["il pacchetto non si legge: manca la fine dell'indice"]);
 const manifestoVero = JSON.parse(readFileSync(join(estratto, "extension", "package.json"), "utf8")) as Manifesto;
 prova("mutazione: un comando con l'icona nel titolo dell'editor è rosso", comandiSenzaTitolo(manifestoVero) && !comandiSenzaTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, menus: { ...manifestoVero.contributes?.menus, "editor/title": [{ command: "c-run.compilaEdEsegui", when: "resourceLangId == c" }] } } }));
 prova("mutazione: un comando che manca è rosso", !comandiSenzaTitolo({ ...manifestoVero, contributes: { ...manifestoVero.contributes, commands: (manifestoVero.contributes?.commands ?? []).filter((c) => c.command !== "c-run.passoPasso") } }));
 prova("mutazione: il lettore del sistema con una voce in più non torna", differenze(voci.keys(), [...contenuto, "extension/x"]).soloB.join() === "extension/x");
+{
+  // Il riconoscimento dei triangoli: ogni famiglia si accende, le icone senza triangolo no; una barra col triangolo col bug al
+  // posto del bug ne ha due.
+  const conTriangolo = ["play", "play-circle", "run", "run-all", "run-above", "debug-start", "debug-continue", "debug-continue-small", "debug-alt", "debug-alt-small", "debug-rerun", "debug-reverse-continue", "notebook-execute", "testing-run-icon", "triangle-right", "play~spin"];
+  const senzaTriangolo = ["bug", "debug", "terminal", "gear", "runner", "debug-console", "debug-stop", "triangle-down"];
+  const spenti = conTriangolo.filter((i) => triangoliIn(`$(${i})`) !== 1);
+  const accesi = senzaTriangolo.filter((i) => triangoliIn(`$(${i})`) !== 0);
+  const barraVera = triangoliIn("$(play) Compila ed esegui main.c $(bug) Passo passo main.c");
+  const barraMutata = triangoliIn("$(play) Compila ed esegui main.c $(debug-alt) Passo passo main.c");
+  console.log(`triangoli: ${conTriangolo.length} icone col triangolo, non riconosciute ${spenti.length}; ${senzaTriangolo.length} senza, riconosciute ${accesi.length}; barra vera ${barraVera}, col triangolo col bug ${barraMutata}`);
+  prova("le icone col triangolo si riconoscono per famiglia, le altre no; il triangolo col bug nella barra fa due triangoli", spenti.length === 0 && accesi.length === 0 && barraVera === 1 && barraMutata === 2, `non riconosciute: ${spenti.join(", ")}; riconosciute a torto: ${accesi.join(", ")}; barra ${barraVera}, mutata ${barraMutata}`);
+}
+
+// --- La nota della versione: dice solo che cosa cambia. Dove è stato provato il pacchetto e la sua attestazione li scrive la
+// corsa, dal conteggio dei rapporti (prove/conteggio.ts --nota): scritti a mano prima della corsa, possono essere falsi.
+const NOTA = join(RADICE, "note", `v${manifestoDelRepository.version}.md`);
+const motiviDellaNota = (testo: string): string[] => [...testo.matchAll(/provat|attestazion/gi)].map((m) => `la nota dice «${m[0]}»`);
+const notaVera = existsSync(NOTA) ? readFileSync(NOTA, "utf8") : "";
+console.log(`nota: ${NOTA.split(/[\\/]/).slice(-2).join("/")}, ${notaVera.length} caratteri, motivi ${motiviDellaNota(notaVera).length}`);
+prova("la nota della versione c'è e non dice dove è stato provato il pacchetto né la sua attestazione", notaVera.trim() !== "" && motiviDellaNota(notaVera).length === 0, motiviDellaNota(notaVera).join("; "));
+mutazione("la nota che dice dove è stato provato e l'attestazione", 2, motiviDellaNota(`${notaVera}\nProvato su Windows. Porta l'Attestazione.\n`), ["la nota dice «Provat»", "la nota dice «Attestazion»"]);
 
 // --- Il conteggio dei rapporti della corsa: le sue sonde, un rosso per ramo (prove/conteggio.ts --sonde).
 const sondeDelConteggio = esegui(["bun", join(RADICE, "prove", "conteggio.ts"), "--sonde"]);
 console.log(sondeDelConteggio.testo.trim());
-prova("il conteggio dei rapporti: ogni ramo rosso si accende da solo, il verde resta verde", sondeDelConteggio.uscita === 0 && /^ESITO: VERDE/m.test(sondeDelConteggio.testo), sondeDelConteggio.testo);
+prova("il conteggio dei rapporti: ogni ramo rosso si accende da solo, il verde resta verde", sondeDelConteggio.uscita === 0 && /^ESITO: VERDE/m.test(sondeDelConteggio.testo) && /^sonde: \d+ \(\d+ verdi, \d+ rami rossi, \d+ fermi[^)]*\); sbagliate 0;/m.test(sondeDelConteggio.testo), sondeDelConteggio.testo);
+// Le prove che il conteggio attende per ogni sistema contro quelle che questa prova dichiara per la corsa (col pacchetto dato,
+// quindi senza la costruzione; su macOS una in meno, la prova del cursore nel terminale riusato, che lì non si conta).
+const dellaCorsa = (sistema: string): number => PROVE_SENZA_EDITOR - 1 + PROVE_DELL_EDITOR - (sistema === "darwin" ? 1 : 0);
+const conteggioDiverso = (previste: Record<string, number>): string[] => {
+  const d = differenze(Object.keys(previste), ["win32", "linux", "darwin"]);
+  return [...d.soloA.map((s) => `${s}: sistema in più`), ...d.soloB.map((s) => `${s}: manca`), ...Object.entries(previste).filter(([s, n]) => !d.soloA.includes(s) && n !== dellaCorsa(s)).map(([s, n]) => `${s}: ${n}, dichiarate ${dellaCorsa(s)}`)];
+};
+console.log(`prove della corsa: ${PROVE_SENZA_EDITOR - 1} senza editor + ${PROVE_DELL_EDITOR} con l'editor (su macOS una in meno); attese dal conteggio ${Object.entries(PREVISTE).map(([s, n]) => `${s} ${n}`).join(", ")}`);
+prova("il conteggio attende per ogni sistema le prove che questa prova dichiara per la corsa", conteggioDiverso(PREVISTE).length === 0, conteggioDiverso(PREVISTE).join("; "));
+mutazione("il conteggio che attende una prova in più su Linux e un sistema in più", 2, conteggioDiverso({ ...PREVISTE, linux: (PREVISTE.linux ?? 0) + 1, freebsd: 1 }), ["freebsd: sistema in più", `linux: ${(PREVISTE.linux ?? 0) + 1}, dichiarate ${dellaCorsa("linux")}`]);
 
 // --- Nell'editor dato.
 function strumentiDa(file: string): Record<string, string> {
@@ -286,12 +343,15 @@ async function nellEditor(eseguibile: string): Promise<void> {
     barraConUnFile?: { voci: string[] };
     leggi?: { domandaVista: boolean; terminaleAttivo?: string; titoloAttivo?: string; testo?: string };
     errore?: { testo: string; problemi: { riga: number; gravita: number; fonte?: string; messaggio: string }[]; cursore: number | null; programmaNato: boolean };
-    passo?: Fermo & { terminale: string | null; fermoPrima: boolean; finito?: boolean; testo?: string; barra?: { voci: string[] } };
+    passo?: Fermo & { terminale: string | null; fermoPrima: boolean; finito?: boolean; testo?: string; barra?: { voci: string[] }; icone?: { nome: string; icona: string | null }[] };
     inizio?: Fermo;
     riuso?: Fermo & { controllo: boolean; sporco: boolean; nuovoTerminale: boolean };
     avvisi?: { testo: string };
     senzaNome?: { schema?: string; barra?: { voci: string[] } };
+    pagina?: { attivoUnTesto: boolean; visibili: string[]; barra?: { voci: string[] }; soloLaPagina?: { visibili: number; barra?: { voci: string[] } } };
+    versione?: string;
   };
+  versioneDellEditor = e.versione ?? null;
   console.log(JSON.stringify(e, null, 2).slice(0, 6000));
   const ciao = e.ciao?.testo ?? "";
   // I due della barra, più quello che dice lo stato della barra alle prove (fuori dal manifesto: non è nella tavolozza).
@@ -321,14 +381,27 @@ async function nellEditor(eseguibile: string): Promise<void> {
   prova("la barra durante il passo passo: le due voci non ci sono", e.passo?.barra !== undefined && e.passo.barra.voci.length === 0, JSON.stringify(e.passo?.barra));
   prova("la barra su un documento C senza nome: le due voci non ci sono", e.senzaNome?.schema === "untitled" && e.senzaNome.barra?.voci.length === 0, JSON.stringify(e.senzaNome));
   prova("il terminale «Programma C» ha l'icona del terminale, non un triangolo", e.ciao?.icona === "terminal", String(e.ciao?.icona));
+  const icone = e.passo?.icone ?? [];
+  prova("i terminali aperti dal passo passo non hanno l'icona del triangolo", icone.length > 0 && icone.every((i) => i.icona === null || triangoliIn(`$(${i.icona})`) === 0), JSON.stringify(icone));
+  // Il file C accanto a una pagina, con la pagina davanti: le voci nominano il file C; con la sola pagina, nessuna voce.
+  const pg = e.pagina;
+  prova(
+    "la barra con un file .c aperto accanto a una pagina davanti: le due voci col nome del file; con la sola pagina nessuna",
+    pg?.attivoUnTesto === false && pg.visibili.includes("file") && pg.barra?.voci.length === 2 && pg.barra.voci.every((v) => v.endsWith(" main.c")) && pg.soloLaPagina?.visibili === 0 && pg.soloLaPagina.barra?.voci.length === 0,
+    JSON.stringify(pg),
+  );
   const avvisi = e.avvisi?.testo ?? "";
   prova("trenta avvisi del compilatore: il terminale li mostra e il programma parte", (avvisi.match(/warning:/g) ?? []).length === 30 && avvisi.includes("Partito nonostante gli avvisi") && avvisi.includes("(finito: uscita 0)"), avvisi.slice(-1500));
   // La premessa della prova del passo passo di nuovo, per sistema. Su Windows e macOS il terminale lo apre lldb-dap e l'editor
   // lo riusa: se ne apre uno nuovo, la prova non dice nulla del riuso. Su Linux l'estensione rifà il terminale «Passo passo» a
   // ogni avvio (extension.ts, terminaleDelPassoPasso): lì il terminale è nuovo, e se non si apre la prova non dice nulla.
   // In tutti e due i casi la prova non si conta, e l'esito è FERMO.
+  // Su macOS la premessa (l'editor riusa il terminale del debugger) non è misurata: si scrive nel rapporto senza fermare.
   const terminaleNuovoAtteso = process.platform === "linux";
-  if (e.riuso?.nuovoTerminale !== terminaleNuovoAtteso) premesseMancanti.push(`passo passo di nuovo: ${terminaleNuovoAtteso ? "su Linux il terminale «Passo passo» non si è rifatto" : "l'editor non ha riusato il terminale del debugger"} (${JSON.stringify(e.riuso)})`);
+  if (process.platform === "darwin") {
+    limiti.push(`macOS, premessa non misurata del passo passo di nuovo: terminale nuovo ${String(e.riuso?.nuovoTerminale)} (atteso il riuso, come su Windows)`);
+    console.log(`NOTA  premessa non misurata: ${limiti.at(-1)}`);
+  } else if (e.riuso?.nuovoTerminale !== terminaleNuovoAtteso) premesseMancanti.push(`passo passo di nuovo: ${terminaleNuovoAtteso ? "su Linux il terminale «Passo passo» non si è rifatto" : "l'editor non ha riusato il terminale del debugger"} (${JSON.stringify(e.riuso)})`);
   // Il controllo della digitazione deve sporcare il file col fuoco nel file, se no la prova dopo non discrimina.
   const cursoreNelTerminale = e.riuso?.controllo === true && e.riuso?.sporco === false;
   if (process.platform === "darwin") {
@@ -343,6 +416,8 @@ async function nellEditor(eseguibile: string): Promise<void> {
   prova("passo passo di nuovo: con l'ingresso 21 si ferma sulla riga 8 con n = 21", e.riuso?.fermo === true && e.riuso?.riga === 8 && e.riuso?.n === "21", JSON.stringify(e.riuso));
 }
 
+/** La versione dell'editor come la dice l'editor stesso: va nel rapporto, e da lì nella nota della release. */
+let versioneDellEditor: string | null = null;
 if (opzioni.editor !== undefined) await nellEditor(opzioni.editor);
 
 // Su macOS la prova del cursore nel terminale riusato si scrive senza contarla (limite dichiarato nel README).
@@ -351,7 +426,7 @@ console.log(`prove: ${fatte}/${provePreviste}, fallite ${fallite.length}${opzion
 const esito = fatte !== provePreviste || premesseMancanti.length > 0 ? "FERMO" : fallite.length > 0 ? "ROSSO" : "VERDE";
 if (opzioni.rapporto !== undefined) {
   mkdirSync(dirname(opzioni.rapporto), { recursive: true });
-  writeFileSync(opzioni.rapporto, `${JSON.stringify({ sistema: process.platform, architettura: process.arch, editor: opzioni.editor ?? null, pacchetto: { nome: VSIX.split(/[\\/]/).pop(), byte: pacchetto.length, sha256: impronta(pacchetto) }, fatte, previste: provePreviste, fallite, premesseMancanti, limiti, esito }, null, 2)}\n`);
+  writeFileSync(opzioni.rapporto, `${JSON.stringify({ sistema: process.platform, architettura: process.arch, editor: opzioni.editor ?? null, versioneDellEditor, pacchetto: { nome: VSIX.split(/[\\/]/).pop(), byte: pacchetto.length, sha256: impronta(pacchetto) }, fatte, previste: provePreviste, fallite, premesseMancanti, limiti, esito }, null, 2)}\n`);
 }
 if (esito === "FERMO") {
   if (fatte !== provePreviste) console.log(`FERMO: il denominatore non torna: dichiarate ${provePreviste}, eseguite ${fatte}`);

@@ -3,9 +3,10 @@
 //
 // I passi: il progetto col Makefile; il file da solo con l'ingresso 21; un errore messo apposta; il passo passo con un
 // punto d'arresto e l'ingresso; il passo passo senza punti d'arresto; di nuovo nel terminale riusato; trenta avvisi del
-// compilatore; un documento C senza nome. Lo stato delle voci della barra lo dà il comando c-run.statoDellaBarra.
+// compilatore; un documento C senza nome; un file C accanto a una pagina. Lo stato delle voci della barra lo dà il comando
+// c-run.statoDellaBarra.
 
-const { existsSync, writeFileSync } = require("node:fs");
+const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const vscode = require("vscode");
 
@@ -131,6 +132,8 @@ exports.run = async () => {
   const msAlTerminale = Date.now() - t0;
   const delDebug = aperti.find((t) => t.creationOptions?.name !== NOME);
   esiti.passo = { partito, terminale: delDebug?.name ?? null, msAlTerminale, fermoPrima: eventi.some((e) => e.evento === "stopped") };
+  // Le icone dei terminali aperti dal passo passo (dall'estensione o dal debugger): nessuna dev'essere un triangolo.
+  esiti.passo.icone = aperti.map((t) => ({ nome: t.creationOptions?.name ?? t.name, icona: t.creationOptions?.iconPath?.id ?? null }));
   await pausa(1500);
   delDebug?.sendText("21", true);
   esiti.passo.fermo = await attendi(() => eventi.some((e) => e.evento === "stopped"), 20000);
@@ -207,5 +210,23 @@ exports.run = async () => {
   esiti.senzaNome = { schema: vscode.window.activeTextEditor?.document.uri.scheme, barra: await vscode.commands.executeCommand("c-run.statoDellaBarra") };
   // Chiuso senza salvare: un documento senza nome modificato fermerebbe la chiusura dell'editor con una domanda.
   await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+  salva();
+
+  // 9. Un file C aperto accanto a una pagina che non è un file di testo, con la pagina davanti: le voci della barra nominano
+  // il file C. Il controllo: chiuso il file C, con la sola pagina, le voci non ci sono.
+  await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  const ed9 = await apri("ciao", "main.c");
+  const pagina = vscode.window.createWebviewPanel("c-run-prova", "Una pagina", { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }, {});
+  pagina.webview.html = "<p>Una pagina</p>";
+  await attendi(() => vscode.window.activeTextEditor === undefined, 5000);
+  await pausa(500);
+  esiti.pagina = { attivoUnTesto: vscode.window.activeTextEditor !== undefined, visibili: vscode.window.visibleTextEditors.map((e) => e.document.uri.scheme), barra: await vscode.commands.executeCommand("c-run.statoDellaBarra") };
+  const scheda = vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.input instanceof vscode.TabInputText && t.input.uri.fsPath === ed9.document.uri.fsPath);
+  if (scheda !== undefined) await vscode.window.tabGroups.close(scheda);
+  await pausa(500);
+  esiti.pagina.soloLaPagina = { visibili: vscode.window.visibleTextEditors.length, barra: await vscode.commands.executeCommand("c-run.statoDellaBarra") };
+  pagina.dispose();
+  // La versione di VSCodium è quella del suo package.json (vscode.version è la versione di Code da cui viene, più corta).
+  esiti.versione = JSON.parse(readFileSync(join(vscode.env.appRoot, "package.json"), "utf8")).version;
   salva();
 };
