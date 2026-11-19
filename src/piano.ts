@@ -1,6 +1,7 @@
 // La logica senza editor: come si compila un file C, che cosa dicono i messaggi del compilatore, quale programma è nato,
 // e le righe in italiano che lo studente legge nel terminale. Nessun import dell'editor: le prove la chiamano da sole.
 
+import { mkdtempSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join } from "node:path";
 
 export type Gravita = "errore" | "avviso" | "nota";
@@ -71,7 +72,41 @@ export function rigaDelRifiuto(segnalazioni: Segnalazione[], fileAperto: string)
 /** La riga del passo passo quando il programma si compila col suo compilatore ma non con quello del debugger (su Windows: un
  *  programma che usa fork o altre funzioni che ci sono solo con il gcc di MSYS2 o Cygwin, e clang no). */
 export function rigaDelPassoPassoImpossibile(compilatore: string): string {
-  return `Questo programma si compila e si esegue con «Compila ed esegui», ma non con ${compilatore}, che serve al passo passo: usa funzioni che ${compilatore} qui non ha. Gli errori di ${compilatore} sono in «Problemi». Per seguirlo passo passo usa un debug con gcc (F5), se l'editor ne ha uno.`;
+  return `Questo programma si compila e si esegue con «Compila ed esegui», ma non con ${compilatore}, che serve al passo passo: usa funzioni che ${compilatore} qui non ha. Gli errori di ${compilatore} sono in «Problemi». Questa estensione non può seguirlo passo passo: serve un debugger per gcc, come gdb.`;
+}
+
+/** Su Linux, quando il terminale «Passo passo» non si apre: che cosa è successo e che cosa fare. */
+export const PASSO_PASSO_SENZA_TERMINALE = "Il terminale «Passo passo» non si è aperto, quindi il passo passo non parte. Riprova con «Passo passo» nella barra in basso; se non si apre ancora, chiudi e riapri l'editor.";
+
+/** Quando il file temporaneo delle righe non si scrive: il motivo e che cosa fare. */
+export const righeNonScritte = (motivo: string, cartella: string) => `Il file temporaneo per il terminale non si scrive (${motivo}): il programma non parte. Controlla che la cartella temporanea del sistema (${cartella}) esista e che si possa scrivere.`;
+
+/** Quando l'editor non apre il terminale «Programma C». */
+export const terminaleNonAperto = (motivo: string) => `Il terminale «Programma C» non si è aperto (${motivo}): il programma non parte. Riprova; se non si apre ancora, chiudi e riapri l'editor.`;
+
+/** Il file delle righe per il terminale «Programma C»: in una cartella nuova a ogni esecuzione, col nome che non si indovina, e
+ *  scritto solo se non c'è già (`wx`). Se non si scrive, la cartella si toglie e torna il motivo. */
+export function scriviLeRighe(righe: Riga[], radice: string): { file: string } | { errore: string } {
+  let cartella: string | undefined;
+  try {
+    cartella = mkdtempSync(join(radice, "c-run-"));
+    const file = join(cartella, "righe.json");
+    writeFileSync(file, JSON.stringify(righe), { encoding: "utf8", flag: "wx" });
+    return { file };
+  } catch (e) {
+    if (cartella !== undefined) rmSync(cartella, { recursive: true, force: true });
+    return { errore: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Toglie il file delle righe e la sua cartella, se è vuota (il terminale l'ha già letto e tolto, o non è mai partito). */
+export function togliLeRighe(file: string): void {
+  try {
+    rmSync(file, { force: true });
+    rmdirSync(dirname(file));
+  } catch {
+    // Già tolta, o non vuota: non è più nostra.
+  }
 }
 
 export type Voce = { nome: string; modificato: number; eseguibile: boolean };
@@ -91,20 +126,25 @@ export const LIMITE_DELLA_RIGA_DI_CMD = 8191;
 
 /** Come si avvia il terminale «Programma C». Le righe da scrivere stanno in un file (`fileDelleRighe`), non sulla riga di
  *  comando: l'uscita del compilatore non ha un tetto, la riga di comando di cmd sì, e oltre il tetto il programma non partirebbe.
- *  Sulla riga restano solo i percorsi. Su Windows il codice d'uscita si legge con !errorlevel! (/v:on): %errorlevel% varrebbe
- *  quello di prima del programma. ELECTRON_RUN_AS_NODE la imposta la shell subito prima: l'editor la toglie dall'ambiente dei
- *  suoi terminali. */
-export function comandoDelTerminale(a: { sistema: string; comSpec?: string; motore: string; scrittore: string; fileDelleRighe: string; programma?: string }): { shellPath: string; shellArgs: string | string[] } {
+ *  Su Windows i percorsi non stanno nemmeno sulla riga: stanno in variabili d'ambiente del terminale, lette con !nome! (/v:on).
+ *  Scritti sulla riga, cmd li rileggerebbe (misurato con cmd: una cartella che si chiama `%OS%` diventa il valore della
+ *  variabile e non parte nulla; un `^` sparisce dal comando che contiene `!errorlevel!`, e la coda non parte; `&`, `'`, un `%`
+ *  solo e `!x!` passavano già). Il valore di una variabile espansa così non si rilegge (prove/logica.test.ts). Il codice d'uscita si legge con !errorlevel!: %errorlevel% varrebbe quello di prima del programma.
+ *  ELECTRON_RUN_AS_NODE la imposta la shell subito prima: l'editor la toglie dall'ambiente dei suoi terminali. Altrove i
+ *  percorsi sono argomenti di sh, che non li rilegge. */
+export function comandoDelTerminale(a: { sistema: string; comSpec?: string; motore: string; scrittore: string; fileDelleRighe: string; programma?: string }): { shellPath: string; shellArgs: string | string[]; env: Record<string, string> } {
   if (a.sistema === "win32") {
     return {
       shellPath: a.comSpec ?? "cmd.exe",
       shellArgs:
         a.programma === undefined
-          ? `/d /s /c "set ELECTRON_RUN_AS_NODE=1&& "${a.motore}" "${a.scrittore}" solo "${a.fileDelleRighe}""`
-          : `/d /v:on /s /c "set ELECTRON_RUN_AS_NODE=1&& "${a.motore}" "${a.scrittore}" testa "${a.fileDelleRighe}" & "${a.programma}" & "${a.motore}" "${a.scrittore}" coda !errorlevel!"`,
+          ? `/d /v:on /s /c "set ELECTRON_RUN_AS_NODE=1&& "!CRUN_MOTORE!" "!CRUN_SCRITTORE!" solo "!CRUN_RIGHE!""`
+          : `/d /v:on /s /c "set ELECTRON_RUN_AS_NODE=1&& "!CRUN_MOTORE!" "!CRUN_SCRITTORE!" testa "!CRUN_RIGHE!" & "!CRUN_PROGRAMMA!" & "!CRUN_MOTORE!" "!CRUN_SCRITTORE!" coda !errorlevel!"`,
+      env: { CRUN_MOTORE: a.motore, CRUN_SCRITTORE: a.scrittore, CRUN_RIGHE: a.fileDelleRighe, ...(a.programma === undefined ? {} : { CRUN_PROGRAMMA: a.programma }) },
     };
   }
   return {
+    env: {},
     shellPath: "/bin/sh",
     shellArgs:
       a.programma === undefined

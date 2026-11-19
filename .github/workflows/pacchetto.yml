@@ -1,7 +1,14 @@
 # Il pacchetto dell'estensione: costruito una volta e, su un'etichetta, attestato subito (l'attestazione dice da dove viene
 # il file, non se funziona: non aspetta le prove, e una macchina che manca non la ferma); provato con l'editor vero su
-# Windows, Ubuntu e macOS, contato, e solo allora messo in una release sull'etichetta. Su un'etichetta v<versione del manifesto> fa tutto; lanciata a mano
-# costruisce e prova senza release, e con `togli` lascia fuori un sistema dalla matrice: il conteggio deve dire rosso.
+# Windows, Ubuntu e macOS, contato, e solo allora messo in una release sull'etichetta, col testo che la corsa compone dalla
+# nota della versione e dal conteggio dei rapporti. Su un'etichetta v<versione del manifesto> fa tutto; lanciata a mano
+# costruisce e prova, e fa la release solo se è lanciata sull'etichetta.
+#
+# Le due dichiarazioni della corsa lanciata a mano (prove/conteggio.ts):
+# - `togli` lascia fuori un sistema dalla matrice per controllare il conteggio, che deve dire rosso: nessuna release;
+# - `senza_macchina` lascia fuori il sistema di cui GitHub non dà la macchina: il conteggio vuole verdi gli altri due, e la
+#   nota della release dice che quel sistema non è stato provato e perché. Mai più di un sistema mancante: con `togli` insieme
+#   vince `togli`.
 #
 # I compilatori: su Windows clang e lldb-dap di llvm-mingw (scaricati con l'impronta da strumenti/strumenti.ts), make e gcc
 # di MSYS2 della macchina; su Ubuntu quelli del sistema più lldb; su macOS quelli di Xcode.
@@ -14,7 +21,11 @@ on:
   workflow_dispatch:
     inputs:
       togli:
-        description: "Un sistema da lasciare fuori dalla matrice (controllo del conteggio): windows, linux o macos"
+        description: "Un sistema da lasciare fuori dalla matrice per controllare il conteggio, che deve dire rosso: windows, linux o macos"
+        required: false
+        default: ""
+      senza_macchina:
+        description: "Il sistema di cui GitHub non dà la macchina: fuori dalla matrice, e la release sull'etichetta esce senza, dicendolo nella nota: windows, linux o macos"
         required: false
         default: ""
 
@@ -35,6 +46,7 @@ jobs:
     outputs:
       nome: ${{ steps.pacchetto.outputs.nome }}
       sha256: ${{ steps.pacchetto.outputs.sha256 }}
+      matrice: ${{ steps.matrice.outputs.matrice }}
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -49,6 +61,12 @@ jobs:
             echo "ROSSO: l'etichetta $GITHUB_REF_NAME non è v$versione"
             exit 1
           fi
+      - id: matrice
+        name: La matrice delle prove, meno i sistemi dichiarati
+        env:
+          TOGLI: ${{ inputs.togli }}
+          SENZA_MACCHINA: ${{ inputs.senza_macchina }}
+        run: bun prove/conteggio.ts --matrice --togli "$TOGLI" --senza-macchina "$SENZA_MACCHINA" --uscita "$GITHUB_OUTPUT"
       - name: La prova senza editor, che costruisce il pacchetto
         run: bun prove/prova.ts
       - id: pacchetto
@@ -74,55 +92,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - sistema: windows
-            os: windows-latest
-          - sistema: linux
-            os: ubuntu-latest
-          - sistema: macos
-            os: macos-latest
+        include: ${{ fromJSON(needs.costruzione.outputs.matrice) }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-        if: inputs.togli != matrix.sistema
       - uses: oven-sh/setup-bun@v2
-        if: inputs.togli != matrix.sistema
         with:
           bun-version: 1.4.2
-      - if: inputs.togli != matrix.sistema
-        run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@v8
-        if: inputs.togli != matrix.sistema
         with:
           name: pacchetto
           path: pacchetto
       - name: make e gcc di MSYS2
-        if: inputs.togli != matrix.sistema && runner.os == 'Windows'
+        if: runner.os == 'Windows'
         run: /c/msys64/usr/bin/pacman.exe -S --noconfirm --needed make gcc
       # Un lldb recente dai pacchetti di LLVM: il 18 di Ubuntu 24.04 non aggancia il programma lanciato nel terminale
       # integrato («Timed out trying to get messages from the debug adaptor»).
       - name: lldb
-        if: inputs.togli != matrix.sistema && runner.os == 'Linux'
+        if: runner.os == 'Linux'
         run: |
           curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update && sudo apt-get install -y lldb-21
           ls /usr/bin/lldb-dap*
       - id: vscodium
-        if: inputs.togli != matrix.sistema
         run: bun strumenti/vscodium.ts --cartella "$RUNNER_TEMP/vscodium" --uscita "$GITHUB_OUTPUT"
-      - if: inputs.togli != matrix.sistema
-        run: bun strumenti/strumenti.ts --cartella "$RUNNER_TEMP/strumenti" --uscita "$RUNNER_TEMP/strumenti/strumenti.txt"
+      - run: bun strumenti/strumenti.ts --cartella "$RUNNER_TEMP/strumenti" --uscita "$RUNNER_TEMP/strumenti/strumenti.txt"
       - name: La prova con l'editor, sul pacchetto costruito
-        if: inputs.togli != matrix.sistema
         run: |
           comando=(bun prove/prova.ts --pacchetto "pacchetto/${{ needs.costruzione.outputs.nome }}" --editor "${{ steps.vscodium.outputs.editor }}" --strumenti "$RUNNER_TEMP/strumenti/strumenti.txt" --rapporto "rapporto/rapporto-${{ matrix.sistema }}.json")
           if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a "${comando[@]}"; else "${comando[@]}"; fi
       - uses: actions/upload-artifact@v7
-        if: always() && inputs.togli != matrix.sistema
+        if: always()
         with:
           name: rapporto-${{ matrix.sistema }}
           path: rapporto/
@@ -142,35 +147,53 @@ jobs:
           pattern: rapporto-*
           path: rapporti
       - name: Un rapporto verde per ogni sistema dichiarato, sul pacchetto costruito
+        env:
+          TOGLI: ${{ inputs.togli }}
+          SENZA_MACCHINA: ${{ inputs.senza_macchina }}
         run: |
           mkdir -p rapporti
-          bun prove/conteggio.ts --cartella rapporti --sha256 "${{ needs.costruzione.outputs.sha256 }}"
+          bun prove/conteggio.ts --cartella rapporti --sha256 "${{ needs.costruzione.outputs.sha256 }}" --togli "$TOGLI" --senza-macchina "$SENZA_MACCHINA" --riassunto riassunto/riassunto.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: riassunto
+          path: riassunto/riassunto.json
+          if-no-files-found: error
 
   release:
     needs: [costruzione, conteggio]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.costruzione.result == 'success' && needs.conteggio.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
       - uses: actions/download-artifact@v8
         with:
           name: pacchetto
           path: pacchetto
+      - uses: actions/download-artifact@v8
+        with:
+          name: riassunto
+          path: riassunto
       - name: Il file è quello costruito e provato
         run: |
           echo "${{ needs.costruzione.outputs.sha256 }}  pacchetto/${{ needs.costruzione.outputs.nome }}" | sha256sum -c -
+      - name: Il testo della release, dalla nota della versione e dal conteggio
+        run: |
+          nota="note/$GITHUB_REF_NAME.md"
+          if [ ! -f "$nota" ]; then echo "ROSSO: manca $nota"; exit 1; fi
+          bun prove/conteggio.ts --nota "$nota" --riassunto riassunto/riassunto.json --file "${{ needs.costruzione.outputs.nome }}" --sha256 "${{ needs.costruzione.outputs.sha256 }}" --corsa "$GITHUB_RUN_ID" --etichetta "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --uscita "$RUNNER_TEMP/testo-della-release.md"
       - name: La release sull'etichetta
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           versione=$(node -p "require('./package.json').version")
-          nota="note/$GITHUB_REF_NAME.md"
-          if [ ! -f "$nota" ]; then echo "ROSSO: manca $nota"; exit 1; fi
           # Le versioni 0.0.x sono di prova: pre-release, e il titolo lo dice.
           if [[ "$versione" == 0.0.* ]]; then
-            gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease --title "C-Run $versione (versione di prova)" --notes-file "$nota" "pacchetto/${{ needs.costruzione.outputs.nome }}"
+            gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease --title "C-Run $versione (versione di prova)" --notes-file "$RUNNER_TEMP/testo-della-release.md" "pacchetto/${{ needs.costruzione.outputs.nome }}"
           else
-            gh release create "$GITHUB_REF_NAME" --verify-tag --title "C-Run $versione" --notes-file "$nota" "pacchetto/${{ needs.costruzione.outputs.nome }}"
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "C-Run $versione" --notes-file "$RUNNER_TEMP/testo-della-release.md" "pacchetto/${{ needs.costruzione.outputs.nome }}"
           fi

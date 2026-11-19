@@ -4,14 +4,14 @@
 // subito la fine dell'ingresso). La coda resta aperta, perché un terminale il cui processo esce si chiude, e l'uscita del
 // programma si perderebbe.
 //
-//   <motore> terminale.cjs testa <file delle righe, in JSON>    scrive le righe, toglie il file ed esce
-//   <motore> terminale.cjs solo  <file delle righe, in JSON>    scrive le righe, toglie il file e resta (nessun programma da eseguire)
+//   <motore> terminale.cjs testa <file delle righe, in JSON>    scrive le righe, toglie il file e la sua cartella ed esce
+//   <motore> terminale.cjs solo  <file delle righe, in JSON>    lo stesso, e resta (nessun programma da eseguire)
 //   <motore> terminale.cjs coda  <codice d'uscita>              scrive com'è finito e resta
 //
 // Le righe arrivano in un file, non sulla riga di comando: l'uscita del compilatore non ha un tetto, la riga di comando di cmd
 // sì (8.191 caratteri), e oltre il tetto non partirebbe nulla.
 
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmdirSync, rmSync } from "node:fs";
 
 type Riga = { testo: string; grigio?: boolean };
 
@@ -36,6 +36,12 @@ if (modo === "coda") {
     righe = [{ testo: `(le righe della compilazione non si leggono: ${e instanceof Error ? e.message : String(e)})` }];
   }
   rmSync(dato ?? "", { force: true });
+  // La cartella del file, nuova a ogni esecuzione (piano.ts, scriviLeRighe): si toglie solo se è vuota.
+  try {
+    rmdirSync((dato ?? "").replace(/[\\/][^\\/]*$/, ""));
+  } catch {
+    // Già tolta, o non vuota.
+  }
   for (const r of righe) scrivi(r.testo, r.grigio);
   if (modo === "solo") resta();
 }

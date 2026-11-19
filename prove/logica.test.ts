@@ -2,9 +2,11 @@
 // apposta (prove/casi/uscite/), non testi scritti a mano.
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { comandoDelTerminale, LIMITE_DELLA_RIGA_DI_CMD, MANCA_IL_COMPILATORE, MANCA_MAKE, mancaLEstensioneDelDebug, nomeDelProgramma, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi } from "../src/piano";
+import { spawnSync } from "node:child_process";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { comandoDelTerminale, LIMITE_DELLA_RIGA_DI_CMD, MANCA_IL_COMPILATORE, MANCA_MAKE, mancaLEstensioneDelDebug, nomeDelProgramma, PASSO_PASSO_SENZA_TERMINALE, pianoDiCompilazione, programmaNato, righeDellaCompilazione, righeNonScritte, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, scriviLeRighe, segnalazioniDi, terminaleNonAperto, togliLeRighe } from "../src/piano";
 
 const uscita = (nome: string) => readFileSync(join(import.meta.dir, "casi", "uscite", nome), "utf8");
 const CARTELLA = join("prova", "dove");
@@ -77,14 +79,108 @@ test("la riga del rifiuto: uno, più d'uno, in un altro file, nessuna riga", () 
 });
 
 test("il passo passo impossibile col compilatore del debugger: la frase nomina il compilatore e il rimedio", () => {
-  expect(rigaDelPassoPassoImpossibile("clang")).toBe("Questo programma si compila e si esegue con «Compila ed esegui», ma non con clang, che serve al passo passo: usa funzioni che clang qui non ha. Gli errori di clang sono in «Problemi». Per seguirlo passo passo usa un debug con gcc (F5), se l'editor ne ha uno.");
+  expect(rigaDelPassoPassoImpossibile("clang")).toBe("Questo programma si compila e si esegue con «Compila ed esegui», ma non con clang, che serve al passo passo: usa funzioni che clang qui non ha. Gli errori di clang sono in «Problemi». Questa estensione non può seguirlo passo passo: serve un debugger per gcc, come gdb.");
 });
 
-test("le frasi di quando manca uno strumento dicono che cosa fare", () => {
+test("le frasi di quando manca uno strumento o un terminale dicono che cosa fare", () => {
   expect(MANCA_MAKE).toContain("il programma non parte. Installa make");
   expect(MANCA_IL_COMPILATORE).toContain("«c-run.compilatore»");
   expect(mancaLEstensioneDelDebug("x.y")).toBe("Per andare passo passo serve l'estensione «LLDB DAP» (x.y): installala dal pannello Estensioni.");
+  expect(PASSO_PASSO_SENZA_TERMINALE).toBe("Il terminale «Passo passo» non si è aperto, quindi il passo passo non parte. Riprova con «Passo passo» nella barra in basso; se non si apre ancora, chiudi e riapri l'editor.");
+  expect(terminaleNonAperto("x")).toBe("Il terminale «Programma C» non si è aperto (x): il programma non parte. Riprova; se non si apre ancora, chiudi e riapri l'editor.");
+  expect(righeNonScritte("x", "y")).toBe("Il file temporaneo per il terminale non si scrive (x): il programma non parte. Controlla che la cartella temporanea del sistema (y) esista e che si possa scrivere.");
 });
+
+test("il file delle righe: nuovo a ogni esecuzione, in una cartella sua, e tolto con la cartella", () => {
+  const radice = mkdtempSync(join(tmpdir(), "c-run  righe-"));
+  try {
+    const righe = [{ testo: "Compilo leggi.c con clang…" }, { testo: "  clang leggi.c", grigio: true }];
+    const a = scriviLeRighe(righe, radice);
+    const b = scriviLeRighe(righe, radice);
+    if (!("file" in a) || !("file" in b)) throw new Error(`non scritte: ${JSON.stringify([a, b])}`);
+    expect(a.file).not.toBe(b.file);
+    expect(dirname(a.file)).not.toBe(dirname(b.file));
+    expect(JSON.parse(readFileSync(a.file, "utf8"))).toEqual(righe);
+    expect(readdirSync(radice).length).toBe(2);
+    // Scritto solo se non c'è: lo stesso nome, scritto di nuovo con `wx`, è un errore.
+    expect(() => writeFileSync(a.file, "x", { flag: "wx" })).toThrow();
+    // Tolto con la sua cartella (il terminale non è partito); tolto di nuovo, nessun errore.
+    togliLeRighe(a.file);
+    togliLeRighe(a.file);
+    expect(existsSync(dirname(a.file))).toBe(false);
+    // Il terminale l'ha già letto e tolto: resta la cartella vuota, che si toglie.
+    rmSync(b.file);
+    togliLeRighe(b.file);
+    expect(readdirSync(radice)).toEqual([]);
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test("il file delle righe che non si scrive: il motivo, e nessuna cartella lasciata", () => {
+  const radice = mkdtempSync(join(tmpdir(), "c-run  righe-"));
+  try {
+    const nonCe = join(radice, "non c'è");
+    const r = scriviLeRighe([{ testo: "x" }], nonCe);
+    expect("errore" in r && r.errore.length > 0).toBe(true);
+    expect(existsSync(nonCe)).toBe(false);
+    expect(readdirSync(radice)).toEqual([]);
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+/** Esegue il comando del terminale con la shell vera del sistema (su Windows cmd, con la riga così com'è, come la passa
+ *  l'editor), con uno scrittore finto che annota i suoi argomenti. Torna le righe annotate. */
+function eseguiIlComando(c: { shellPath: string; shellArgs: string | string[]; env: Record<string, string> }, annotazioni: string): string[] {
+  rmSync(annotazioni, { force: true });
+  const env = { ...process.env, ...c.env, CRUN_ANNOTAZIONI: annotazioni };
+  const p = typeof c.shellArgs === "string" ? spawnSync(c.shellPath, [c.shellArgs], { env, windowsVerbatimArguments: true, stdio: "ignore", timeout: 20000 }) : spawnSync(c.shellPath, c.shellArgs, { env, stdio: "ignore", timeout: 20000 });
+  if (p.error !== undefined) throw p.error;
+  return existsSync(annotazioni) ? readFileSync(annotazioni, "utf8").split("\n").filter((r) => r !== "") : [];
+}
+
+test("i percorsi con ^ % & ' ! e spazi doppi arrivano al terminale come sono (misurato con la shell vera)", () => {
+  // La cartella dell'editor, dell'estensione e del programma con i caratteri che cmd tratta a parte; %OS% c'è su Windows.
+  const radice = mkdtempSync(join(tmpdir(), "c-run  prova-"));
+  try {
+    const strana = join(radice, "a  ^b 100%OS% & l'altro !x! fine");
+    mkdirSync(strana);
+    const scrittore = join(strana, "scrittore.cjs");
+    writeFileSync(scrittore, 'require("node:fs").appendFileSync(process.env.CRUN_ANNOTAZIONI, JSON.stringify(process.argv.slice(2)) + "\\n");\n');
+    const righe = join(strana, "righe.json");
+    writeFileSync(righe, "[]");
+    // Il programma: su Windows una copia di where.exe (senza argomenti esce con un codice suo), altrove uno script.
+    const windows = process.platform === "win32";
+    const programma = join(strana, windows ? "programma.exe" : "programma");
+    if (windows) copyFileSync(join(process.env.SystemRoot ?? "", "System32", "where.exe"), programma);
+    else {
+      writeFileSync(programma, "#!/bin/sh\nexit 7\n");
+      chmodSync(programma, 0o755);
+    }
+    const diretto = spawnSync(programma, [], { stdio: "ignore" }).status;
+    expect(diretto === null || diretto === 0).toBe(false);
+    // Il motore (qui Bun, che esegue lo scrittore come lo esegue l'editor) nella stessa cartella: un collegamento, se no una copia.
+    const motore = join(strana, windows ? "motore.exe" : "motore");
+    try {
+      linkSync(process.execPath, motore);
+    } catch {
+      copyFileSync(process.execPath, motore);
+    }
+    if (!windows) chmodSync(motore, 0o755);
+    const comune = { sistema: process.platform, comSpec: process.env.ComSpec, motore, scrittore, fileDelleRighe: righe };
+    const annotazioni = join(radice, "annotazioni.txt");
+    expect(eseguiIlComando(comandoDelTerminale({ ...comune, programma }), annotazioni)).toEqual([JSON.stringify(["testa", righe]), JSON.stringify(["coda", String(diretto)])]);
+    expect(eseguiIlComando(comandoDelTerminale(comune), annotazioni)).toEqual([JSON.stringify(["solo", righe])]);
+    if (windows) {
+      // Il controllo: i percorsi scritti sulla riga di cmd (com'era nella 0.0.6) non arrivano come sono.
+      const sullaRiga = `/d /v:on /s /c "set ELECTRON_RUN_AS_NODE=1&& "${comune.motore}" "${scrittore}" testa "${righe}" & "${programma}" & "${comune.motore}" "${scrittore}" coda !errorlevel!"`;
+      expect(eseguiIlComando({ shellPath: comune.comSpec ?? "cmd.exe", shellArgs: sullaRiga, env: {} }, annotazioni)).not.toEqual([JSON.stringify(["testa", righe]), JSON.stringify(["coda", String(diretto)])]);
+    }
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+}, 60000);
 
 test("il comando del terminale con trenta diagnostiche: le righe restano nel file, la riga di cmd sotto il limite", () => {
   // Trenta avvisi veri di clang 23 su prove/casi/avvisi/avvisi.c (il caso della prova con l'editor), in una cartella dal

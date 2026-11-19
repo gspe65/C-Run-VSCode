@@ -2,7 +2,7 @@
   "name": "C-Run",
   "displayName": "C: compila, esegui, passo passo",
   "description": "Compila ed esegue con un clic il programma C del file aperto, o lo segue passo passo.",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "publisher": "gilan65",
   "license": "MIT",
   "private": true,

@@ -2,11 +2,11 @@
 // «Programma C» e l'avvio del passo passo. La logica sta in piano.ts.
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
 import * as vscode from "vscode";
-import { comandoDelTerminale, MANCA_IL_COMPILATORE, MANCA_MAKE, mancaLEstensioneDelDebug, pianoDiCompilazione, programmaNato, righeDellaCompilazione, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, segnalazioniDi, type Piano, type Riga, type Segnalazione } from "./piano";
+import { comandoDelTerminale, MANCA_IL_COMPILATORE, MANCA_MAKE, mancaLEstensioneDelDebug, PASSO_PASSO_SENZA_TERMINALE, pianoDiCompilazione, programmaNato, righeDellaCompilazione, righeNonScritte, rigaDelPassoPassoImpossibile, rigaDelRifiuto, scegliCompilatore, scriviLeRighe, segnalazioniDi, terminaleNonAperto, togliLeRighe, type Piano, type Riga, type Segnalazione } from "./piano";
 
 const NOME_DEL_TERMINALE = "Programma C";
 const ESTENSIONE_DEL_DEBUG = "llvm-vs-code-extensions.lldb-dap";
@@ -52,20 +52,33 @@ function mostraNelPannello(segnalazioni: Segnalazione[], fonte: string): void {
 function apriIlTerminale(righe: Riga[], cartella: string, programma: string | undefined, prendeIlFuoco: boolean): void {
   terminale?.dispose();
   const tutte = programma === undefined ? righe : [...righe, { testo: `Eseguo ${programma} (se legge qualcosa, scrivilo qui e premi Invio):` }];
-  const fileDelleRighe = join(tmpdir(), `c-run-righe-${process.pid}-${Date.now()}-${++numeroDelleRighe}.json`);
-  writeFileSync(fileDelleRighe, JSON.stringify(tutte), "utf8");
+  // Il file è nuovo a ogni esecuzione; se il terminale non lo legge (non parte, o si chiude prima), lo toglie la sua chiusura.
+  const scritte = scriviLeRighe(tutte, tmpdir());
+  if ("errore" in scritte) {
+    void vscode.window.showErrorMessage(righeNonScritte(scritte.errore, tmpdir()));
+    return;
+  }
   const comando = comandoDelTerminale({
     sistema: process.platform,
     comSpec: process.env.ComSpec,
     motore: process.execPath,
     scrittore: join(cartellaDellEstensione, "dist", "terminale.cjs"),
-    fileDelleRighe,
+    fileDelleRighe: scritte.file,
     programma: programma === undefined ? undefined : join(cartella, programma),
   });
-  terminale = vscode.window.createTerminal({ name: NOME_DEL_TERMINALE, ...comando, cwd: cartella, iconPath: new vscode.ThemeIcon(ICONA_DEL_TERMINALE) });
+  try {
+    terminale = vscode.window.createTerminal({ name: NOME_DEL_TERMINALE, ...comando, cwd: cartella, iconPath: new vscode.ThemeIcon(ICONA_DEL_TERMINALE) });
+  } catch (e) {
+    togliLeRighe(scritte.file);
+    terminale = undefined;
+    void vscode.window.showErrorMessage(terminaleNonAperto(e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  righeDelTerminale.set(terminale, scritte.file);
   terminale.show(!prendeIlFuoco);
 }
-let numeroDelleRighe = 0;
+/** Il file delle righe di ciascun terminale «Programma C», da togliere quando il terminale si chiude. */
+const righeDelTerminale = new Map<vscode.Terminal, string>();
 const ICONA_DEL_TERMINALE = "terminal";
 
 /** Il file C che i comandi della barra nominano: quello attivo, se no il primo C visibile (per esempio accanto a una pagina
@@ -177,7 +190,7 @@ async function passoPasso(uri?: vscode.Uri): Promise<boolean> {
   if (process.platform === "linux") {
     const dispositivo = await terminaleDelPassoPasso(c.piano.cartella);
     if (dispositivo === undefined) {
-      void vscode.window.showErrorMessage("Il terminale «Passo passo» non si è aperto: il passo passo non parte.");
+      void vscode.window.showErrorMessage(PASSO_PASSO_SENZA_TERMINALE);
       return false;
     }
     // Misurato con lldb-dap 21: l'attributo `stdio` non collega il programma al terminale. Le impostazioni del bersaglio sì:
@@ -212,7 +225,8 @@ async function terminaleDelPassoPasso(cartella: string): Promise<string | undefi
     shellPath: "/bin/sh",
     shellArgs: ["-c", 'printf "\\033]0;Passo passo\\007"; tty > "$0"; exec sleep 2147483647', file],
     cwd: cartella,
-    iconPath: new vscode.ThemeIcon("debug-alt"),
+    // Il bug, non il triangolo col bug: durante il passo passo il triangolo è «Continua» della barra del debug.
+    iconPath: new vscode.ThemeIcon("bug"),
   });
   terminaleDelPasso.show(false);
   for (let i = 0; i < 100; i++) {
@@ -287,6 +301,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.onDidCloseTerminal((t) => {
       if (t === terminale) terminale = undefined;
+      const file = righeDelTerminale.get(t);
+      if (file !== undefined) {
+        togliLeRighe(file);
+        righeDelTerminale.delete(t);
+      }
       if (t === terminaleDelDebug) terminaleDelDebug = undefined;
     }),
     vscode.commands.registerCommand("c-run.compilaEdEsegui", compilaEdEsegui),
@@ -296,4 +315,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 }
 
-export function deactivate(): void {}
+export function deactivate(): void {
+  for (const file of righeDelTerminale.values()) togliLeRighe(file);
+  righeDelTerminale.clear();
+}

@@ -2,8 +2,6 @@
 
 Un'estensione per VSCodium e Visual Studio Code che compila ed esegue con un clic il programma C del file aperto, o lo segue passo passo.
 
-> **Versione di prova (0.0.6).** Il pacchetto è costruito e provato dalle GitHub Actions di questo repository; la prima versione per l'uso è in preparazione.
-
 ## Che cosa fa
 
 Con un file `.c` aperto, in basso nella barra di stato compaiono **«Compila ed esegui»** e **«Passo passo»**, col nome del file su cui agiscono (per esempio «Compila ed esegui lettura-intero.c»). È l'unico posto, scritto per esteso: chi impara a programmare non deve scegliere fra due triangoli. Restano visibili anche quando il file è aperto accanto a un'altra pagina, e spariscono durante il passo passo, che si continua dalla barra del debug.
@@ -35,7 +33,7 @@ codium --install-extension C-Run-<versione>.vsix
 
 ## Da dove viene il pacchetto
 
-Il pacchetto lo costruisce la corsa delle GitHub Actions di questo repository, a ogni etichetta, **una volta sola**. Lo stesso file viene provato con VSCodium 1.143.17232 su Windows (clang e lldb di llvm-mingw, make e gcc di MSYS2), Ubuntu (con uno schermo virtuale, i compilatori del sistema e lldb 21 di LLVM) e macOS (gli strumenti di Xcode), facendo ciò che fa chi lo usa: un progetto col `Makefile`, un file da solo che legge un numero, un errore messo apposta, il passo passo (due volte, la seconda nel terminale che l'editor riusa: su macOS l'esito del cursore si scrive nel rapporto senza fermare la release, per il limite detto sopra), trenta avvisi del compilatore. La release si crea solo se le tre prove sono verdi, e il file porta un'attestazione della sua provenienza, che si verifica con:
+Il pacchetto lo costruisce la corsa delle GitHub Actions di questo repository, a ogni etichetta, **una volta sola**. Lo stesso file viene provato con VSCodium (la versione è scritta nella nota di ogni release) su Windows (clang e lldb di llvm-mingw, make e gcc di MSYS2), Ubuntu (con uno schermo virtuale, i compilatori del sistema e lldb 21 di LLVM) e macOS (gli strumenti di Xcode), facendo ciò che fa chi lo usa: un progetto col `Makefile`, un file da solo che legge un numero, un errore messo apposta, il passo passo (due volte, la seconda nel terminale che l'editor riusa: su macOS l'esito del cursore si scrive nel rapporto senza fermare la release, per il limite detto sopra), trenta avvisi del compilatore. La release si crea solo se le prove sono verdi su Windows, Ubuntu e macOS; se GitHub non dà la macchina di uno dei sistemi, la release può uscire senza quel sistema, e la sua nota lo dice. Il file porta un'attestazione della sua provenienza, che si verifica con:
 
 ```
 gh attestation verify C-Run-<versione>.vsix -R gspe65/C-Run-VSCode
