@@ -88,7 +88,7 @@ test("le frasi di quando manca uno strumento o un terminale dicono che cosa fare
   expect(mancaLEstensioneDelDebug("x.y")).toBe("Per andare passo passo serve l'estensione «LLDB DAP» (x.y): installala dal pannello Estensioni.");
   expect(PASSO_PASSO_SENZA_TERMINALE).toBe("Il terminale «Passo passo» non si è aperto, quindi il passo passo non parte. Riprova con «Passo passo» nella barra in basso; se non si apre ancora, chiudi e riapri l'editor.");
   expect(terminaleNonAperto("x")).toBe("Il terminale «Programma C» non si è aperto (x): il programma non parte. Riprova; se non si apre ancora, chiudi e riapri l'editor.");
-  expect(righeNonScritte("x", "y")).toBe("Non riesco a scrivere il file temporaneo per il terminale (x): il programma non parte. Controlla che la cartella temporanea del sistema (y) esista e che si possa scrivere.");
+  expect(righeNonScritte("x", "y")).toBe("Il file temporaneo per il terminale non si scrive (x): il programma non parte. Controlla che la cartella temporanea del sistema (y) esista e che si possa scrivere.");
 });
 
 test("il file delle righe: nuovo a ogni esecuzione, in una cartella sua, e tolto con la cartella", () => {

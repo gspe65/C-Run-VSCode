@@ -79,7 +79,7 @@ export function rigaDelPassoPassoImpossibile(compilatore: string): string {
 export const PASSO_PASSO_SENZA_TERMINALE = "Il terminale «Passo passo» non si è aperto, quindi il passo passo non parte. Riprova con «Passo passo» nella barra in basso; se non si apre ancora, chiudi e riapri l'editor.";
 
 /** Quando il file temporaneo delle righe non si scrive: il motivo e che cosa fare. */
-export const righeNonScritte = (motivo: string, cartella: string) => `Non riesco a scrivere il file temporaneo per il terminale (${motivo}): il programma non parte. Controlla che la cartella temporanea del sistema (${cartella}) esista e che si possa scrivere.`;
+export const righeNonScritte = (motivo: string, cartella: string) => `Il file temporaneo per il terminale non si scrive (${motivo}): il programma non parte. Controlla che la cartella temporanea del sistema (${cartella}) esista e che si possa scrivere.`;
 
 /** Quando l'editor non apre il terminale «Programma C». */
 export const terminaleNonAperto = (motivo: string) => `Il terminale «Programma C» non si è aperto (${motivo}): il programma non parte. Riprova; se non si apre ancora, chiudi e riapri l'editor.`;
