@@ -218,9 +218,19 @@ exports.run = async () => {
   const ed9 = await apri("ciao", "main.c");
   const pagina = vscode.window.createWebviewPanel("c-run-prova", "Una pagina", { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }, {});
   pagina.webview.html = "<p>Una pagina</p>";
-  await attendi(() => vscode.window.activeTextEditor === undefined, 5000);
+  // La premessa: la pagina davanti e nessun editor di testo attivo. Su macOS la sola apertura lascia il fuoco al file C
+  // (misurato nelle Actions): si porta davanti la pagina e il suo gruppo, finché la premessa si realizza o scade il tempo.
+  let tentativi = 0;
+  const premessa = await attendi(async () => {
+    if (vscode.window.activeTextEditor === undefined && pagina.active) return true;
+    tentativi++;
+    pagina.reveal(pagina.viewColumn, false);
+    await pausa(300);
+    if (vscode.window.activeTextEditor !== undefined) await vscode.commands.executeCommand("workbench.action.focusSecondEditorGroup");
+    return false;
+  }, 15000);
   await pausa(500);
-  esiti.pagina = { attivoUnTesto: vscode.window.activeTextEditor !== undefined, visibili: vscode.window.visibleTextEditors.map((e) => e.document.uri.scheme), barra: await vscode.commands.executeCommand("c-run.statoDellaBarra") };
+  esiti.pagina = { premessa: premessa && vscode.window.activeTextEditor === undefined, tentativi, paginaAttiva: pagina.active, attivoUnTesto: vscode.window.activeTextEditor !== undefined, visibili: vscode.window.visibleTextEditors.map((e) => e.document.uri.scheme), barra: await vscode.commands.executeCommand("c-run.statoDellaBarra") };
   const scheda = vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.input instanceof vscode.TabInputText && t.input.uri.fsPath === ed9.document.uri.fsPath);
   if (scheda !== undefined) await vscode.window.tabGroups.close(scheda);
   await pausa(500);

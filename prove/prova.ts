@@ -348,7 +348,7 @@ async function nellEditor(eseguibile: string): Promise<void> {
     riuso?: Fermo & { controllo: boolean; sporco: boolean; nuovoTerminale: boolean };
     avvisi?: { testo: string };
     senzaNome?: { schema?: string; barra?: { voci: string[] } };
-    pagina?: { attivoUnTesto: boolean; visibili: string[]; barra?: { voci: string[] }; soloLaPagina?: { visibili: number; barra?: { voci: string[] } } };
+    pagina?: { premessa?: boolean; tentativi?: number; paginaAttiva?: boolean; attivoUnTesto: boolean; visibili: string[]; barra?: { voci: string[] }; soloLaPagina?: { visibili: number; barra?: { voci: string[] } } };
     versione?: string;
   };
   versioneDellEditor = e.versione ?? null;
@@ -383,11 +383,14 @@ async function nellEditor(eseguibile: string): Promise<void> {
   prova("il terminale «Programma C» ha l'icona del terminale, non un triangolo", e.ciao?.icona === "terminal", String(e.ciao?.icona));
   const icone = e.passo?.icone ?? [];
   prova("i terminali aperti dal passo passo non hanno l'icona del triangolo", icone.length > 0 && icone.every((i) => i.icona === null || triangoliIn(`$(${i.icona})`) === 0), JSON.stringify(icone));
-  // Il file C accanto a una pagina, con la pagina davanti: le voci nominano il file C; con la sola pagina, nessuna voce.
+  // Il file C accanto a una pagina, con la pagina davanti: le voci nominano il file C; con la sola pagina, nessuna voce. La
+  // premessa (la pagina davanti, nessun editor di testo attivo, il file C visibile) si guarda a parte: se non si è realizzata
+  // la prova non dice nulla del ramo, e l'esito è FERMO.
   const pg = e.pagina;
+  if (!(pg?.premessa === true && pg.attivoUnTesto === false && pg.visibili.includes("file"))) premesseMancanti.push(`il file C accanto a una pagina: la pagina non è venuta davanti, o il file C non è visibile (${JSON.stringify(pg)})`);
   prova(
     "la barra con un file .c aperto accanto a una pagina davanti: le due voci col nome del file; con la sola pagina nessuna",
-    pg?.attivoUnTesto === false && pg.visibili.includes("file") && pg.barra?.voci.length === 2 && pg.barra.voci.every((v) => v.endsWith(" main.c")) && pg.soloLaPagina?.visibili === 0 && pg.soloLaPagina.barra?.voci.length === 0,
+    pg?.barra?.voci.length === 2 && pg.barra.voci.every((v) => v.endsWith(" main.c")) && pg.soloLaPagina?.visibili === 0 && pg.soloLaPagina.barra?.voci.length === 0,
     JSON.stringify(pg),
   );
   const avvisi = e.avvisi?.testo ?? "";
