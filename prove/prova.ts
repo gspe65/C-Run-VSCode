@@ -273,6 +273,38 @@ console.log(`prove della corsa: ${PROVE_SENZA_EDITOR - 1} senza editor + ${PROVE
 prova("il conteggio attende per ogni sistema le prove che questa prova dichiara per la corsa", conteggioDiverso(PREVISTE).length === 0, conteggioDiverso(PREVISTE).join("; "));
 mutazione("il conteggio che attende una prova in più su Linux e un sistema in più", 2, conteggioDiverso({ ...PREVISTE, linux: (PREVISTE.linux ?? 0) + 1, freebsd: 1 }), ["freebsd: sistema in più", `linux: ${(PREVISTE.linux ?? 0) + 1}, dichiarate ${dellaCorsa("linux")}`]);
 
+// --- La premessa della prova del file C accanto a una pagina: la pagina davanti (attiva nel suo gruppo), nessun editor di
+// testo attivo, il file C visibile. Mancante è FERMO. Su macOS, dove nelle Actions la finestra non ha il fuoco, la pagina può
+// essere attiva nel suo gruppo mentre l'editor attivo resta il file C: lì la premessa si scrive nel rapporto come non
+// realizzata, coi dati, e la prova delle voci si giudica lo stesso. Se la pagina non è attiva nemmeno nel gruppo, resta FERMO.
+type EsitiDellaPagina = { premessa?: boolean; tentativi?: number; paginaAttiva?: boolean; attivoUnTesto: boolean; visibili: string[]; barra?: { voci: string[] }; soloLaPagina?: { visibili: number; barra?: { voci: string[] } } };
+function premessaDellaPagina(pg: EsitiDellaPagina | undefined, sistema: string): { mancante?: string; limite?: string } {
+  if (pg?.premessa === true && pg.attivoUnTesto === false && pg.visibili.includes("file")) return {};
+  if (sistema === "darwin" && pg?.paginaAttiva === true && pg.attivoUnTesto === true && pg.visibili.includes("file")) return { limite: `macOS, il file C accanto a una pagina: premessa non realizzata su macOS, la pagina è attiva nel suo gruppo, ma l'editor attivo resta il file C (${JSON.stringify(pg)})` };
+  return { mancante: `il file C accanto a una pagina: la pagina non è venuta davanti, o il file C non è visibile (${JSON.stringify(pg)})` };
+}
+{
+  // Il controllo della regola, su esiti veri: quelli di macOS della corsa delle Actions e quelli di Windows. Sbagliata, la
+  // prova non può giudicare: FERMO (non si conta, e il denominatore non cambia).
+  const voci = { voci: ["$(play) Compila ed esegui main.c", "$(bug) Passo passo main.c"] };
+  const delMac: EsitiDellaPagina = { premessa: false, tentativi: 31, paginaAttiva: true, attivoUnTesto: true, visibili: ["file"], barra: voci, soloLaPagina: { visibili: 0, barra: { voci: [] } } };
+  const diWindows: EsitiDellaPagina = { ...delMac, premessa: true, tentativi: 0, attivoUnTesto: false };
+  const casi: [string, EsitiDellaPagina | undefined, string, "nulla" | "limite" | "mancante"][] = [
+    ["Windows, premessa realizzata", diWindows, "win32", "nulla"],
+    ["macOS, pagina attiva nel gruppo e il file C attivo", delMac, "darwin", "limite"],
+    ["Linux, gli stessi esiti di macOS", delMac, "linux", "mancante"],
+    ["macOS, la pagina non attiva nemmeno nel gruppo", { ...delMac, paginaAttiva: false }, "darwin", "mancante"],
+    ["macOS, il file C non visibile", { ...delMac, visibili: [] }, "darwin", "mancante"],
+    ["macOS, senza esiti", undefined, "darwin", "mancante"],
+  ];
+  const sbagliati = casi.filter(([, pg, s, atteso]) => {
+    const r = premessaDellaPagina(pg, s);
+    return (r.mancante !== undefined ? "mancante" : r.limite !== undefined ? "limite" : "nulla") !== atteso;
+  }).map(([nome]) => nome);
+  console.log(`premessa della pagina: ${casi.length} casi, sbagliati ${sbagliati.length}${sbagliati.length > 0 ? `: ${sbagliati.join("; ")}` : ""}`);
+  if (sbagliati.length > 0) fermo(`la regola della premessa della pagina sbaglia: ${sbagliati.join("; ")}`);
+}
+
 // --- Nell'editor dato.
 function strumentiDa(file: string): Record<string, string> {
   return Object.fromEntries(readFileSync(file, "utf8").split(/\r?\n/).filter((r) => r.includes("=")).map((r) => [r.slice(0, r.indexOf("=")), r.slice(r.indexOf("=") + 1)]));
@@ -348,7 +380,7 @@ async function nellEditor(eseguibile: string): Promise<void> {
     riuso?: Fermo & { controllo: boolean; sporco: boolean; nuovoTerminale: boolean };
     avvisi?: { testo: string };
     senzaNome?: { schema?: string; barra?: { voci: string[] } };
-    pagina?: { premessa?: boolean; tentativi?: number; paginaAttiva?: boolean; attivoUnTesto: boolean; visibili: string[]; barra?: { voci: string[] }; soloLaPagina?: { visibili: number; barra?: { voci: string[] } } };
+    pagina?: EsitiDellaPagina;
     versione?: string;
   };
   versioneDellEditor = e.versione ?? null;
@@ -384,10 +416,14 @@ async function nellEditor(eseguibile: string): Promise<void> {
   const icone = e.passo?.icone ?? [];
   prova("i terminali aperti dal passo passo non hanno l'icona del triangolo", icone.length > 0 && icone.every((i) => i.icona === null || triangoliIn(`$(${i.icona})`) === 0), JSON.stringify(icone));
   // Il file C accanto a una pagina, con la pagina davanti: le voci nominano il file C; con la sola pagina, nessuna voce. La
-  // premessa (la pagina davanti, nessun editor di testo attivo, il file C visibile) si guarda a parte: se non si è realizzata
-  // la prova non dice nulla del ramo, e l'esito è FERMO.
+  // premessa si guarda a parte (premessaDellaPagina): mancante è FERMO; su macOS un limite scritto nel rapporto.
   const pg = e.pagina;
-  if (!(pg?.premessa === true && pg.attivoUnTesto === false && pg.visibili.includes("file"))) premesseMancanti.push(`il file C accanto a una pagina: la pagina non è venuta davanti, o il file C non è visibile (${JSON.stringify(pg)})`);
+  const premessaPagina = premessaDellaPagina(pg, process.platform);
+  if (premessaPagina.mancante !== undefined) premesseMancanti.push(premessaPagina.mancante);
+  if (premessaPagina.limite !== undefined) {
+    limiti.push(premessaPagina.limite);
+    console.log(`NOTA  ${premessaPagina.limite}`);
+  }
   prova(
     "la barra con un file .c aperto accanto a una pagina davanti: le due voci col nome del file; con la sola pagina nessuna",
     pg?.barra?.voci.length === 2 && pg.barra.voci.every((v) => v.endsWith(" main.c")) && pg.soloLaPagina?.visibili === 0 && pg.soloLaPagina.barra?.voci.length === 0,
